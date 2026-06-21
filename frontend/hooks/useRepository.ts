@@ -28,7 +28,10 @@ export function useRepository() {
   const addRepository = useCallback(async (github_url: string): Promise<Repository> => {
     const repo = await api.repositories.create(github_url);
     if (repo.id) {
-      setRepositories((prev) => [repo, ...prev]);
+      setRepositories((prev) => {
+        const filtered = prev.filter((r) => r.id !== repo.id);
+        return [repo, ...filtered];
+      });
     }
     return repo;
   }, []);

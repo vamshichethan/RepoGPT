@@ -47,7 +47,6 @@ from app.services.architecture_service import generate_architecture
 logger = logging.getLogger(__name__)
 
 # Embedding vector dimension for text-embedding-3-small
-_EMBEDDING_DIM = 1536
 # Number of chunks to embed per API call
 _EMBED_BATCH_SIZE = 100
 
@@ -85,7 +84,7 @@ async def _embed_texts(
     texts: list[str],
     model: str,
 ) -> list[list[float]]:
-    """Embed *texts* using the OpenAI embeddings API.
+    """Embed *texts* using the OpenAI embeddings API with exponential backoff on rate limits.
 
     Returns a list of embedding vectors in the same order as *texts*.
     """
@@ -96,8 +95,24 @@ async def _embed_texts(
     kwargs = {}
     if settings.embedding_dim:
         kwargs["dimensions"] = settings.embedding_dim
-    response = await client.embeddings.create(input=texts, model=model, **kwargs)
-    return [item.embedding for item in response.data]
+
+    max_retries = 5
+    for attempt in range(max_retries):
+        try:
+            response = await client.embeddings.create(input=texts, model=model, **kwargs)
+            return [item.embedding for item in response.data]
+        except Exception as exc:
+            is_rate_limit = "429" in str(exc) or "RESOURCE_EXHAUSTED" in str(exc) or "quota" in str(exc).lower()
+            if is_rate_limit and attempt < max_retries - 1:
+                logger.warning(
+                    "Rate limit hit during embedding. Sleeping 65 seconds to reset quota (attempt %d/%d)... Error: %s",
+                    attempt + 1,
+                    max_retries,
+                    exc,
+                )
+                await asyncio.sleep(65)
+            else:
+                raise exc
 
 
 # ---------------------------------------------------------------------------
@@ -106,16 +121,39 @@ async def _embed_texts(
 
 
 def _ensure_qdrant_collection(collection_name: str) -> None:
-    """Create the Qdrant collection if it does not already exist."""
+    """Create the Qdrant collection if it does not already exist, or recreate if dimensions mismatch."""
     settings = get_settings()
     qdrant = get_qdrant_client()
     existing = {c.name for c in qdrant.get_collections().collections}
+    
+    if collection_name in existing:
+        try:
+            info = qdrant.get_collection(collection_name=collection_name)
+            vectors_config = info.config.params.vectors
+            size = None
+            if hasattr(vectors_config, "size"):
+                size = vectors_config.size
+            elif isinstance(vectors_config, dict) and "size" in vectors_config:
+                size = vectors_config["size"]
+            
+            if size is not None and size != settings.embedding_dim:
+                logger.warning(
+                    "Collection %s exists with dimension %d, but config expects %d. Recreating.",
+                    collection_name,
+                    size,
+                    settings.embedding_dim,
+                )
+                qdrant.delete_collection(collection_name=collection_name)
+                existing.remove(collection_name)
+        except Exception as exc:
+            logger.warning("Error checking collection %s dimension: %s", collection_name, exc)
+
     if collection_name not in existing:
         qdrant.create_collection(
             collection_name=collection_name,
             vectors_config=VectorParams(size=settings.embedding_dim, distance=Distance.COSINE),
         )
-        logger.info("Created Qdrant collection: %s", collection_name)
+        logger.info("Created Qdrant collection: %s with dimension %d", collection_name, settings.embedding_dim)
     else:
         logger.info("Qdrant collection already exists: %s", collection_name)
 
@@ -305,6 +343,7 @@ async def run_ingestion(repository_id: int) -> None:
                     batch_start,
                     batch_start + len(batch) - 1,
                 )
+                await asyncio.sleep(0.5)
 
             # Bulk-insert DocumentChunk rows
             db.add_all(all_db_chunks)

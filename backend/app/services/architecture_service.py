@@ -171,22 +171,36 @@ async def generate_architecture(
     )
 
     # 4. Invoke LLM with JSON format support
-    response = await openai_client.chat.completions.create(
-        model=settings.chat_model,  # use gpt-4o for best reasoning
-        messages=[
-            {
-                "role": "system",
-                "content": (
-                    "You are a Senior Software Architect. "
-                    "You respond ONLY with a valid JSON object matching the requested schema. "
-                    "Ensure your Mermaid syntax is clean and syntax-valid."
-                )
-            },
-            {"role": "user", "content": prompt}
-        ],
-        response_format={"type": "json_object"},
-        temperature=0.1,
-    )
+    import asyncio
+    max_retries = 3
+    base_delay = 5.0
+    response = None
+    for attempt in range(max_retries):
+        try:
+            response = await openai_client.chat.completions.create(
+                model=settings.chat_model,  # use gpt-4o for best reasoning
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are a Senior Software Architect. "
+                            "You respond ONLY with a valid JSON object matching the requested schema. "
+                            "Ensure your Mermaid syntax is clean and syntax-valid."
+                        )
+                    },
+                    {"role": "user", "content": prompt}
+                ],
+                response_format={"type": "json_object"},
+                temperature=0.1,
+            )
+            break
+        except Exception as exc:
+            is_rate_limit = "429" in str(exc) or "RESOURCE_EXHAUSTED" in str(exc) or "quota" in str(exc).lower()
+            if is_rate_limit and attempt < max_retries - 1:
+                logger.warning("Rate limit hit during architecture generation. Sleeping 65 seconds to reset quota... Error: %s", exc)
+                await asyncio.sleep(65)
+            else:
+                raise exc
 
     raw_json = response.choices[0].message.content or "{}"
 
