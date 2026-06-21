@@ -1,0 +1,99 @@
+# render.yaml — Render deployment blueprint for RepoGPT
+# Deploy the backend as a Web Service on Render.
+# Documentation: https://render.com/docs/blueprint-spec
+#
+# HOW TO DEPLOY:
+# 1. Push this repo to GitHub
+# 2. Go to https://dashboard.render.com → "New" → "Blueprint"
+# 3. Connect your GitHub repo — Render will auto-detect this file
+# 4. Set the env vars marked as "sync: false" in the Render dashboard
+#
+# REQUIRED EXTERNAL SERVICES (free):
+#   - Qdrant Cloud:  https://cloud.qdrant.io  (free 1GB cluster)
+#   - Neo4j Aura:    https://console.neo4j.io (free 200k nodes)
+
+services:
+  - type: web
+    name: repogpt-backend
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free          # Change to "starter" for persistent disk
+    region: oregon      # us-west-2
+
+    # Render injects PORT automatically — entrypoint.sh reads it
+    envVars:
+      # ── AI / LLM ────────────────────────────────────────────
+      - key: OPENAI_API_KEY
+        sync: false       # Set in Render dashboard → your Gemini key
+
+      - key: OPENAI_BASE_URL
+        value: https://generativelanguage.googleapis.com/v1beta/openai/
+
+      - key: EMBEDDING_MODEL
+        value: gemini-embedding-001
+
+      - key: EMBEDDING_DIM
+        value: "768"
+
+      - key: CHAT_MODEL
+        value: gemini-3.5-flash
+
+      - key: SUMMARY_MODEL
+        value: gemini-3.5-flash
+
+      # ── GitHub ──────────────────────────────────────────────
+      - key: GITHUB_TOKEN
+        sync: false       # Set in Render dashboard → your GitHub PAT
+
+      # ── Database (Render Managed PostgreSQL) ─────────────────
+      - key: DATABASE_URL
+        fromDatabase:
+          name: repogpt-db
+          property: connectionString
+
+      # ── Qdrant Cloud ─────────────────────────────────────────
+      - key: QDRANT_URL
+        sync: false       # e.g. https://xxxx.us-east-1-0.aws.cloud.qdrant.io:6333
+
+      - key: QDRANT_API_KEY
+        sync: false       # From Qdrant Cloud dashboard
+
+      # ── Neo4j Aura ───────────────────────────────────────────
+      - key: NEO4J_URI
+        sync: false       # e.g. neo4j+s://xxxxxxxx.databases.neo4j.io
+
+      - key: NEO4J_USERNAME
+        value: neo4j
+
+      - key: NEO4J_PASSWORD
+        sync: false       # From Neo4j Aura dashboard
+
+      # ── CORS ─────────────────────────────────────────────────
+      - key: CORS_ORIGINS
+        sync: false       # Set to your Vercel URL e.g. https://repogpt.vercel.app
+
+      # ── App Config ───────────────────────────────────────────
+      - key: WORKSPACE_DIR
+        value: /app/workspace
+
+      - key: ENVIRONMENT
+        value: production
+
+      - key: MAX_FILES
+        value: "50000"
+
+      - key: MAX_REPO_SIZE_MB
+        value: "500"
+
+    disk:
+      name: workspace
+      mountPath: /app/workspace
+      sizeGB: 1           # Persistent disk for cloned repos (requires paid plan)
+
+databases:
+  - name: repogpt-db
+    plan: free            # 90-day free PostgreSQL on Render
+    region: oregon
+    databaseName: repogpt
+    user: repogpt

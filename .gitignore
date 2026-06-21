@@ -1,0 +1,54 @@
+# =====================================================
+# RepoGPT — .gitignore
+# =====================================================
+
+# ── Environment (NEVER commit secrets) ───────────────
+.env
+.env.local
+.env.*.local
+
+# ── Backend ──────────────────────────────────────────
+backend/workspace/
+backend/__pycache__/
+backend/**/__pycache__/
+backend/.venv/
+backend/venv/
+backend/*.egg-info/
+backend/.pytest_cache/
+backend/alembic/versions/*.pyc
+
+# ── Frontend ─────────────────────────────────────────
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/.env.local
+frontend/tsconfig.tsbuildinfo
+
+# ── Docker volumes / local data ──────────────────────
+snapshots/
+storage/
+.qdrant-initialized
+
+# ── Docker ───────────────────────────────────────────
+.docker/
+
+# ── IDE ──────────────────────────────────────────────
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# ── Python ───────────────────────────────────────────
+*.pyc
+*.pyo
+__pycache__/
+*.so
+*.egg
+dist/
+build/
+
+# ── Logs ─────────────────────────────────────────────
+*.log
+logs/
