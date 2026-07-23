@@ -1,7 +1,7 @@
 """Add graph models
 
 Revision ID: 1234567890ab
-Revises: 
+Revises: 0001_initial
 Create Date: 2026-06-20 18:44:00.000000
 
 """
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = '1234567890ab'
-down_revision = None
+down_revision = '0001_initial'
 branch_labels = None
 depends_on = None
 
