@@ -17,6 +17,22 @@ Built with **Next.js 15**, **FastAPI**, **Gemini AI**, **Qdrant**, **PostgreSQL*
 
 ## 🚀 Deployment
 
+### Live Deployment
+
+| Service | URL |
+|---------|-----|
+| Frontend | [https://repogpt-nine.vercel.app](https://repogpt-nine.vercel.app) |
+| Backend API | [https://repogpt-backend-shf2.onrender.com](https://repogpt-backend-shf2.onrender.com) |
+| API Docs | [https://repogpt-backend-shf2.onrender.com/docs](https://repogpt-backend-shf2.onrender.com/docs) |
+| Health Check | [https://repogpt-backend-shf2.onrender.com/health](https://repogpt-backend-shf2.onrender.com/health) |
+
+Production wiring:
+
+| Variable | Value |
+|----------|-------|
+| `NEXT_PUBLIC_API_URL` | `https://repogpt-backend-shf2.onrender.com` |
+| `CORS_ORIGINS` | `https://repogpt-nine.vercel.app` |
+
 ### Deploy on Render (Backend) + Vercel (Frontend)
 
 #### Step 1 — External Services (Free)
@@ -47,10 +63,10 @@ Sign up and get credentials for:
 | `QDRANT_API_KEY` | Qdrant Cloud API key |
 | `NEO4J_URI` | `neo4j+s://xxxx.databases.neo4j.io` |
 | `NEO4J_PASSWORD` | Neo4j Aura password |
-| `CORS_ORIGINS` | `https://your-app.vercel.app` (set after Vercel deploy) |
+| `CORS_ORIGINS` | `https://repogpt-nine.vercel.app` |
 
 5. Click **Deploy** — Render will build the Docker image and run DB migrations automatically.
-6. Copy your backend URL: `https://repogpt-backend.onrender.com`
+6. Copy your backend URL: `https://repogpt-backend-shf2.onrender.com`
 
 #### Step 3 — Deploy Frontend on Vercel
 
@@ -61,10 +77,10 @@ Sign up and get credentials for:
 
 | Variable | Value |
 |----------|-------|
-| `NEXT_PUBLIC_API_URL` | `https://repogpt-backend.onrender.com` |
+| `NEXT_PUBLIC_API_URL` | `https://repogpt-backend-shf2.onrender.com` |
 
 5. Click **Deploy** — Vercel auto-detects Next.js and builds it.
-6. Copy your frontend URL and update `CORS_ORIGINS` in Render.
+6. Copy your frontend URL and update `CORS_ORIGINS` in Render. The current production frontend is `https://repogpt-nine.vercel.app`.
 
 ---
 
