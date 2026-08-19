@@ -100,6 +100,40 @@ Respond ONLY with a valid JSON object matching this exact structure:
 """
 
 
+def _build_fallback_summary(repo: Repository, folder_structure: str) -> dict:
+    """Create a deterministic summary when the AI provider is unavailable."""
+    languages = ", ".join(repo.primary_languages or []) or "unknown languages"
+    frameworks = ", ".join(repo.detected_frameworks or []) or "no detected frameworks"
+    databases = ", ".join(repo.detected_databases or []) or "no detected databases"
+    dependencies = [
+        {
+            "name": name,
+            "version": str(version),
+            "purpose": "Detected dependency from repository manifest.",
+        }
+        for name, version in (repo.detected_dependencies or {}).items()
+    ]
+
+    return {
+        "project_purpose": (
+            f"{repo.owner}/{repo.name} was ingested successfully, but AI summary "
+            "generation is temporarily unavailable. RepoGPT detected "
+            f"{languages}, {frameworks}, and {databases}."
+        ),
+        "tech_stack": {
+            "frontend": "Detected from repository files; see frameworks list.",
+            "backend": "Detected from repository files; see languages and frameworks list.",
+            "database": databases,
+            "cache": "N/A",
+            "authentication": "N/A",
+            "cloud": "N/A",
+        },
+        "folder_structure": folder_structure or "Folder structure unavailable.",
+        "modules": [],
+        "dependencies": dependencies,
+    }
+
+
 async def generate_summary(
     repository_id: int,
     db: AsyncSession,
@@ -183,6 +217,7 @@ async def generate_summary(
     max_retries = 3
     base_delay = 5.0
     response = None
+    last_error: Exception | None = None
     for attempt in range(max_retries):
         try:
             response = await openai_client.chat.completions.create(
@@ -203,26 +238,29 @@ async def generate_summary(
             )
             break
         except Exception as exc:
+            last_error = exc
             is_rate_limit = "429" in str(exc) or "RESOURCE_EXHAUSTED" in str(exc) or "quota" in str(exc).lower()
             if is_rate_limit and attempt < max_retries - 1:
                 logger.warning("Rate limit hit during summary. Sleeping 65 seconds to reset quota... Error: %s", exc)
                 await asyncio.sleep(65)
             else:
-                raise exc
+                break
 
-    raw_json = response.choices[0].message.content or "{}"
+    if response is None:
+        logger.warning(
+            "AI summary generation failed for repository %d; using fallback summary: %s",
+            repository_id,
+            last_error,
+        )
+        summary = _build_fallback_summary(repo, folder_structure)
+    else:
+        raw_json = response.choices[0].message.content or "{}"
 
-    try:
-        summary = json.loads(raw_json)
-    except json.JSONDecodeError as exc:
-        logger.error("Failed to parse summary JSON: %s | raw=%s", exc, raw_json[:500])
-        summary = {
-            "project_purpose": "Summary generation failed.",
-            "tech_stack": {},
-            "folder_structure": folder_structure,
-            "modules": [],
-            "dependencies": [],
-        }
+        try:
+            summary = json.loads(raw_json)
+        except json.JSONDecodeError as exc:
+            logger.error("Failed to parse summary JSON: %s | raw=%s", exc, raw_json[:500])
+            summary = _build_fallback_summary(repo, folder_structure)
 
     # ------------------------------------------------------------------
     # Persist summary

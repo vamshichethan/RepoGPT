@@ -100,6 +100,38 @@ CRITICAL RULES FOR MERMAID DIAGRAM:
 """
 
 
+def _build_fallback_architecture(repo: Repository, folder_structure: str) -> dict:
+    """Create a deterministic architecture response when AI generation fails."""
+    languages = ", ".join(repo.primary_languages or []) or "unknown languages"
+    frameworks = ", ".join(repo.detected_frameworks or []) or "N/A"
+    databases = ", ".join(repo.detected_databases or []) or "N/A"
+
+    return {
+        "architecture_summary": (
+            f"{repo.owner}/{repo.name} was scanned successfully, but AI architecture "
+            "generation is temporarily unavailable. RepoGPT detected "
+            f"{languages}, frameworks/services: {frameworks}, databases: {databases}."
+        ),
+        "mermaid_code": (
+            "flowchart TD\n"
+            f"  A[\"{repo.owner}/{repo.name}\"]\n"
+            "  B[\"Repository files\"]\n"
+            "  C[\"Detected metadata\"]\n"
+            "  A --> B\n"
+            "  B --> C"
+        ),
+        "service_dependencies": [],
+        "tech_stack_breakdown": {
+            "Frontend": frameworks,
+            "Backend": languages,
+            "Database": databases,
+            "Cache": "N/A",
+            "External APIs": "N/A",
+        },
+        "data_flow_description": folder_structure or "Data flow could not be inferred automatically.",
+    }
+
+
 async def generate_architecture(
     repository_id: int,
     db: AsyncSession,
@@ -175,6 +207,7 @@ async def generate_architecture(
     max_retries = 3
     base_delay = 5.0
     response = None
+    last_error: Exception | None = None
     for attempt in range(max_retries):
         try:
             response = await openai_client.chat.completions.create(
@@ -195,37 +228,33 @@ async def generate_architecture(
             )
             break
         except Exception as exc:
+            last_error = exc
             is_rate_limit = "429" in str(exc) or "RESOURCE_EXHAUSTED" in str(exc) or "quota" in str(exc).lower()
             if is_rate_limit and attempt < max_retries - 1:
                 logger.warning("Rate limit hit during architecture generation. Sleeping 65 seconds to reset quota... Error: %s", exc)
                 await asyncio.sleep(65)
             else:
-                raise exc
+                break
 
-    raw_json = response.choices[0].message.content or "{}"
+    if response is None:
+        logger.warning(
+            "AI architecture generation failed for repository %d; using fallback architecture: %s",
+            repository_id,
+            last_error,
+        )
+        arch_data = _build_fallback_architecture(repo, folder_structure)
+    else:
+        raw_json = response.choices[0].message.content or "{}"
 
-    try:
-        arch_data = json.loads(raw_json)
-        # Quick validation of keys
-        for key in ["architecture_summary", "mermaid_code", "service_dependencies", "tech_stack_breakdown", "data_flow_description"]:
-            if key not in arch_data:
-                raise KeyError(f"Missing key: {key}")
-    except Exception as exc:
-        logger.error("Failed to parse architecture JSON: %s | raw=%s", exc, raw_json[:800])
-        # Fallback dummy JSON
-        arch_data = {
-            "architecture_summary": "Architecture extraction failed.",
-            "mermaid_code": "flowchart TD\n  A[\"Failed to generate diagram\"]",
-            "service_dependencies": [],
-            "tech_stack_breakdown": {
-                "Frontend": "N/A",
-                "Backend": "N/A",
-                "Database": "N/A",
-                "Cache": "N/A",
-                "External APIs": "N/A"
-            },
-            "data_flow_description": "Data flow mapping failed."
-        }
+        try:
+            arch_data = json.loads(raw_json)
+            # Quick validation of keys
+            for key in ["architecture_summary", "mermaid_code", "service_dependencies", "tech_stack_breakdown", "data_flow_description"]:
+                if key not in arch_data:
+                    raise KeyError(f"Missing key: {key}")
+        except Exception as exc:
+            logger.error("Failed to parse architecture JSON: %s | raw=%s", exc, raw_json[:800])
+            arch_data = _build_fallback_architecture(repo, folder_structure)
 
     # 5. Persist architecture data
     repo.architecture_json = arch_data

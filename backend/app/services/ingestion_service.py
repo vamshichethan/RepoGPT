@@ -16,6 +16,7 @@ for real-time progress.
 import asyncio
 import logging
 import os
+import re
 import shutil
 import uuid
 from datetime import datetime, timezone
@@ -49,6 +50,7 @@ logger = logging.getLogger(__name__)
 # Embedding vector dimension for text-embedding-3-small
 # Number of chunks to embed per API call
 _EMBED_BATCH_SIZE = 100
+_STATUS_ERROR_MAX_CHARS = 220
 
 
 # ---------------------------------------------------------------------------
@@ -72,6 +74,19 @@ async def _update_status(
     repo.updated_at = datetime.now(timezone.utc)
     await db.commit()
     logger.info("Repository %d → status=%s | %s", repo_id, status, message or "")
+
+
+def _compact_external_error(exc: Exception) -> str:
+    """Return a short, user-safe external service error summary."""
+    message = " ".join(str(exc).split())
+    message = re.sub(
+        r"(?i)(api[-_ ]?key|authorization|token|password)([=: ]+)(\S+)",
+        r"\1\2[redacted]",
+        message,
+    )
+    if len(message) > _STATUS_ERROR_MAX_CHARS:
+        return f"{message[: _STATUS_ERROR_MAX_CHARS - 3]}..."
+    return message or exc.__class__.__name__
 
 
 # ---------------------------------------------------------------------------
@@ -171,7 +186,6 @@ async def run_ingestion(repository_id: int) -> None:
     """
     settings = get_settings()
     openai_client = get_openai_client()
-    qdrant_client = get_qdrant_client()
 
     async with AsyncSessionLocal() as db:
         try:
@@ -289,65 +303,96 @@ async def run_ingestion(repository_id: int) -> None:
             # ------------------------------------------------------------------
             # Step 4: Embed and upsert to Qdrant
             # ------------------------------------------------------------------
-            await _update_status(
-                db,
-                repository_id,
-                "embedding",
-                f"Embedding {len(chunks)} chunks…",
-            )
-
-            _ensure_qdrant_collection(collection_name)
-
-            # Process in batches
+            vector_warning: str | None = None
             all_db_chunks: list[DocumentChunk] = []
-            for batch_start in range(0, len(chunks), _EMBED_BATCH_SIZE):
-                batch = chunks[batch_start: batch_start + _EMBED_BATCH_SIZE]
-                texts = [c[1] for c in batch]
 
-                embeddings = await _embed_texts(
-                    openai_client, texts, settings.embedding_model
+            if chunks:
+                await _update_status(
+                    db,
+                    repository_id,
+                    "embedding",
+                    f"Embedding {len(chunks)} chunks…",
                 )
 
-                points: list[PointStruct] = []
-                for (file_path, chunk_text, chunk_idx), embedding in zip(batch, embeddings):
-                    point_id = str(uuid.uuid4())
-                    points.append(
-                        PointStruct(
-                            id=point_id,
-                            vector=embedding,
-                            payload={
-                                "file_path": file_path,
-                                "chunk_index": chunk_idx,
-                                "content": chunk_text,
-                                "repository_id": repository_id,
-                            },
+                try:
+                    qdrant_client = get_qdrant_client()
+                    _ensure_qdrant_collection(collection_name)
+
+                    # Process in batches
+                    for batch_start in range(0, len(chunks), _EMBED_BATCH_SIZE):
+                        batch = chunks[batch_start: batch_start + _EMBED_BATCH_SIZE]
+                        texts = [c[1] for c in batch]
+
+                        embeddings = await _embed_texts(
+                            openai_client, texts, settings.embedding_model
                         )
+
+                        points: list[PointStruct] = []
+                        for (file_path, chunk_text, chunk_idx), embedding in zip(batch, embeddings):
+                            point_id = str(uuid.uuid4())
+                            points.append(
+                                PointStruct(
+                                    id=point_id,
+                                    vector=embedding,
+                                    payload={
+                                        "file_path": file_path,
+                                        "chunk_index": chunk_idx,
+                                        "content": chunk_text,
+                                        "repository_id": repository_id,
+                                    },
+                                )
+                            )
+                            all_db_chunks.append(
+                                DocumentChunk(
+                                    repository_id=repository_id,
+                                    file_path=file_path,
+                                    chunk_content=chunk_text,
+                                    chunk_index=chunk_idx,
+                                    embedding_id=point_id,
+                                )
+                            )
+
+                        qdrant_client.upsert(
+                            collection_name=collection_name,
+                            points=points,
+                            wait=True,
+                        )
+                        logger.debug(
+                            "Upserted batch %d-%d to Qdrant",
+                            batch_start,
+                            batch_start + len(batch) - 1,
+                        )
+                        await asyncio.sleep(0.5)
+
+                    logger.info("Indexed %d document chunks in Qdrant.", len(all_db_chunks))
+                except Exception as vector_exc:
+                    vector_warning = (
+                        "Vector search is unavailable; repository summary was generated "
+                        f"without Qdrant indexing. Details: {_compact_external_error(vector_exc)}"
                     )
-                    all_db_chunks.append(
+                    logger.warning(
+                        "Vector indexing failed for repository %d; continuing without Qdrant: %s",
+                        repository_id,
+                        vector_exc,
+                        exc_info=True,
+                    )
+                    all_db_chunks = [
                         DocumentChunk(
                             repository_id=repository_id,
                             file_path=file_path,
                             chunk_content=chunk_text,
                             chunk_index=chunk_idx,
-                            embedding_id=point_id,
+                            embedding_id=None,
                         )
-                    )
+                        for file_path, chunk_text, chunk_idx in chunks
+                    ]
+            else:
+                vector_warning = "No readable text chunks were found for vector indexing."
 
-                qdrant_client.upsert(
-                    collection_name=collection_name,
-                    points=points,
-                    wait=True,
-                )
-                logger.debug(
-                    "Upserted batch %d-%d to Qdrant",
-                    batch_start,
-                    batch_start + len(batch) - 1,
-                )
-                await asyncio.sleep(0.5)
-
-            # Bulk-insert DocumentChunk rows
-            db.add_all(all_db_chunks)
-            await db.commit()
+            # Bulk-insert DocumentChunk rows even if vector indexing is unavailable.
+            if all_db_chunks:
+                db.add_all(all_db_chunks)
+                await db.commit()
             logger.info("Saved %d document chunks to PostgreSQL.", len(all_db_chunks))
 
             # ------------------------------------------------------------------
@@ -406,7 +451,10 @@ async def run_ingestion(repository_id: int) -> None:
             # ------------------------------------------------------------------
             # Step 7: Ready
             # ------------------------------------------------------------------
-            await _update_status(db, repository_id, "ready", "Ingestion complete.")
+            ready_message = "Ingestion complete."
+            if vector_warning:
+                ready_message = f"Ingestion complete. {vector_warning}"
+            await _update_status(db, repository_id, "ready", ready_message)
             logger.info("Repository %d ingestion complete.", repository_id)
 
         except Exception as exc:

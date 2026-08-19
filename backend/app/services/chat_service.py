@@ -22,6 +22,7 @@ from app.config import get_settings
 from app.core.llm import get_openai_client
 from app.core.qdrant_client import get_qdrant_client
 from app.models.chat_session import ChatSession
+from app.models.document_chunk import DocumentChunk
 from app.models.message import Message
 from app.models.repository import Repository
 
@@ -130,6 +131,31 @@ async def create_rag_response(
             })
     except Exception as exc:
         logger.exception("Qdrant search failed: %s", exc)
+
+    if not context_chunks:
+        fallback_result = await db.execute(
+            select(DocumentChunk)
+            .where(DocumentChunk.repository_id == repo.id)
+            .order_by(DocumentChunk.file_path, DocumentChunk.chunk_index)
+            .limit(settings.retrieval_top_k)
+        )
+        fallback_chunks = list(fallback_result.scalars().all())
+        for chunk in fallback_chunks:
+            context_chunks.append(
+                f"--- FILE: {chunk.file_path} (Chunk {chunk.chunk_index}) ---\n"
+                f"{chunk.chunk_content}\n"
+            )
+            sources.append({
+                "file_path": chunk.file_path,
+                "chunk_index": chunk.chunk_index,
+                "relevance_score": 0.0,
+            })
+        if fallback_chunks:
+            logger.info(
+                "Using %d PostgreSQL chunks as fallback chat context for repository %d.",
+                len(fallback_chunks),
+                repo.id,
+            )
 
     # 5. Neo4j graph context (hybrid retrieval)
     graph_context_str = ""

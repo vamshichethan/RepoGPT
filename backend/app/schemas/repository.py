@@ -18,6 +18,7 @@ STATUS_PROGRESS: dict[str, int] = {
     "embedding": 70,
     "summarizing": 85,
     "architecting": 95,
+    "graph_building": 98,
     "ready": 100,
     "error": -1,
 }
