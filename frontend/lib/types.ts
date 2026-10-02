@@ -100,8 +100,7 @@ export interface DependencyGraphResponse {
 }
 
 export interface FlowTraceResponse {
-  text_explanation: string;
-  mermaid_code: string;
+  flows: Record<string, unknown>[];
 }
 
 export interface ImpactAnalysisResponse {

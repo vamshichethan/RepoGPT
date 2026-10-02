@@ -1,13 +1,8 @@
-import re
 from datetime import datetime
 from typing import Any
 
 from pydantic import BaseModel, field_validator, ConfigDict
 
-
-_GITHUB_URL_RE = re.compile(
-    r"^https?://github\.com/(?P<owner>[A-Za-z0-9_.-]+)/(?P<repo>[A-Za-z0-9_.-]+?)(?:\.git)?/?$"
-)
 
 # Maps status -> progress percent for the status endpoint
 STATUS_PROGRESS: dict[str, int] = {
@@ -32,13 +27,29 @@ class RepositoryCreate(BaseModel):
     @field_validator("github_url")
     @classmethod
     def validate_github_url(cls, v: str) -> str:
+        """Validate and normalize any GitHub URL to canonical form.
+
+        Delegates to parse_github_url() which robustly handles:
+          - https://github.com/owner/repo
+          - https://github.com/owner/repo/tree/main/subdir
+          - https://github.com/owner/repo?tab=readme-ov-file
+          - github.com/owner/repo  (no scheme)
+          - git@github.com:owner/repo.git  (SSH)
+          - www.github.com/owner/repo
+        """
+        from app.services.git_service import parse_github_url
+
         v = v.strip()
-        if not _GITHUB_URL_RE.match(v):
-            raise ValueError(
-                "github_url must be a valid GitHub repository URL "
-                "(e.g. https://github.com/owner/repo)"
-            )
-        return v
+        if not v:
+            raise ValueError("github_url cannot be empty")
+
+        try:
+            owner, repo = parse_github_url(v)
+        except ValueError as exc:
+            raise ValueError(str(exc)) from exc
+
+        # Return the canonical URL form
+        return f"https://github.com/{owner}/{repo}"
 
 
 class RepositoryResponse(BaseModel):

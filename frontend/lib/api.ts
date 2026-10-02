@@ -78,25 +78,29 @@ export const api = {
   },
 
   productivity: {
-    getDependencies: (repoId: number): Promise<DependencyGraphResponse> =>
-      fetch(`${API_BASE}/api/repositories/${repoId}/dependencies`)
+    getDependencies: (repoId: number, filePath = ''): Promise<DependencyGraphResponse> =>
+      fetch(`${API_BASE}/api/productivity/dependencies`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ repo_id: repoId, file_path: filePath }),
+      })
         .then((r) => handleResponse<DependencyGraphResponse>(r))
         .catch(() => ({ nodes: [], edges: [] })),
 
-    getFlowTrace: (repoId: number, query: string): Promise<FlowTraceResponse> =>
-      fetch(`${API_BASE}/api/repositories/${repoId}/flow`, {
+    getFlowTrace: (repoId: number, sourcePath: string, targetPath = ''): Promise<FlowTraceResponse> =>
+      fetch(`${API_BASE}/api/productivity/flow`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query }),
+        body: JSON.stringify({ repo_id: repoId, source_path: sourcePath, target_path: targetPath }),
       })
         .then((r) => handleResponse<FlowTraceResponse>(r))
-        .catch(() => ({ text_explanation: '', mermaid_code: '' })),
+        .catch(() => ({ flows: [] })),
 
-    getImpactAnalysis: (repoId: number, file_path: string): Promise<ImpactAnalysisResponse> =>
-      fetch(`${API_BASE}/api/repositories/${repoId}/impact`, {
+    getImpactAnalysis: (repoId: number, filePath: string): Promise<ImpactAnalysisResponse> =>
+      fetch(`${API_BASE}/api/productivity/impact`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ file_path }),
+        body: JSON.stringify({ repo_id: repoId, file_path: filePath }),
       })
         .then((r) => handleResponse<ImpactAnalysisResponse>(r))
         .catch(() => ({

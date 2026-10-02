@@ -23,7 +23,7 @@ export function useChat({ repoId }: UseChatOptions) {
       // Try to get existing sessions first
       const sessions = await api.chat.getSessions(repoId);
       if (sessions && sessions.length > 0) {
-        const latestSession = sessions[sessions.length - 1];
+        const latestSession = sessions[0];
         setSession(latestSession);
         const msgs = await api.chat.getMessages(latestSession.id);
         setMessages(Array.isArray(msgs) ? msgs : []);
@@ -90,7 +90,7 @@ export function useChat({ repoId }: UseChatOptions) {
 
       try {
         const response = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/sessions/${currentSession.id}/messages`,
+          `/api/sessions/${currentSession.id}/messages`,
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
