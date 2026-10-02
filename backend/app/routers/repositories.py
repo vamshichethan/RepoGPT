@@ -30,20 +30,26 @@ async def create_repository(
     db: AsyncSession = Depends(get_db),
 ):
     """Submit a GitHub URL, register the repo in database, and trigger background ingestion."""
-    github_url = payload.github_url.strip()
+    raw_url = payload.github_url.strip()
 
     try:
-        owner, name = parse_github_url(github_url)
+        owner, name = parse_github_url(raw_url)
+        canonical_url = f"https://github.com/{owner}/{name}"
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
-    # Check if repository already exists
+    # Check if repository already exists by canonical URL or raw input
     result = await db.execute(
-        select(Repository).where(Repository.github_url == github_url)
+        select(Repository).where(
+            (Repository.github_url == canonical_url) | (Repository.github_url == raw_url)
+        )
     )
     existing_repo = result.scalar_one_or_none()
 
     if existing_repo:
+        if existing_repo.github_url != canonical_url:
+            existing_repo.github_url = canonical_url
+            await db.commit()
         # If it exists but is in error status, let's reset it and trigger ingestion again
         if existing_repo.status == "error":
             existing_repo.status = "pending"
@@ -57,7 +63,7 @@ async def create_repository(
     new_repo = Repository(
         name=name,
         owner=owner,
-        github_url=github_url,
+        github_url=canonical_url,
         status="pending",
         status_message="Scheduled for ingestion",
         primary_languages=[],

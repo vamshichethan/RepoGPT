@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { api } from '@/lib/api';
-import type { KnowledgeGraphNode, KnowledgeGraphEdge, KnowledgeGraphResponse } from '@/lib/types';
+import type { KnowledgeGraphResponse } from '@/lib/types';
 import { Search, X, ZoomIn, ZoomOut, Maximize2, RefreshCw, Filter } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
@@ -33,9 +33,27 @@ const REL_COLORS: Record<string, string> = {
 // Types
 // ---------------------------------------------------------------------------
 
-interface GraphData {
-  nodes: Array<{ id: string; type: string; name: string; file_path?: string; x?: number; y?: number; vx?: number; vy?: number; fx?: number | null; fy?: number | null }>;
-  links: Array<{ source: string; target: string; type: string }>;
+interface GraphNode {
+  id: string;
+  type: string;
+  name: string;
+  file_path?: string;
+  x?: number;
+  y?: number;
+  vx?: number;
+  vy?: number;
+  fx?: number | null;
+  fy?: number | null;
+}
+
+interface GraphLink {
+  source: string | GraphNode;
+  target: string | GraphNode;
+  type: string;
+}
+
+function getEndpointId(endpoint: string | GraphNode): string {
+  return typeof endpoint === 'string' ? endpoint : endpoint.id;
 }
 
 interface KnowledgeGraphExplorerProps {
@@ -51,11 +69,10 @@ export function KnowledgeGraphExplorer({ repoId }: KnowledgeGraphExplorerProps) 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animFrameRef = useRef<number>(0);
 
-  const [graphData, setGraphData] = useState<GraphData>({ nodes: [], links: [] });
   const [entityCounts, setEntityCounts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedNode, setSelectedNode] = useState<GraphData['nodes'][0] | null>(null);
+  const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [highlightedNodes, setHighlightedNodes] = useState<Set<string>>(new Set());
   const [visibleTypes, setVisibleTypes] = useState<Set<string>>(new Set(Object.keys(NODE_CONFIG)));
@@ -65,130 +82,12 @@ export function KnowledgeGraphExplorer({ repoId }: KnowledgeGraphExplorerProps) 
   const transform = useRef({ x: 0, y: 0, scale: 1 });
   const isDragging = useRef(false);
   const dragStart = useRef({ x: 0, y: 0 });
-  const hoveredNode = useRef<GraphData['nodes'][0] | null>(null);
+  const hoveredNode = useRef<GraphNode | null>(null);
 
   // Simulation state
-  const simNodes = useRef<GraphData['nodes']>([]);
-  const simLinks = useRef<GraphData['links']>([]);
+  const simNodes = useRef<GraphNode[]>([]);
+  const simLinks = useRef<GraphLink[]>([]);
   const simRunning = useRef(false);
-
-  // ---------------------------------------------------------------------------
-  // Load data
-  // ---------------------------------------------------------------------------
-
-  useEffect(() => {
-    const load = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const data: KnowledgeGraphResponse = await api.knowledgeGraph.getGraph(repoId, 400);
-        if (!data.nodes) throw new Error('No graph data returned');
-
-        // Build GraphData from API response
-        const nodes = data.nodes.map((n) => ({
-          id: n.id,
-          type: n.type || 'file',
-          name: n.name,
-          file_path: n.file_path,
-          x: Math.random() * 800 - 400,
-          y: Math.random() * 600 - 300,
-          vx: 0,
-          vy: 0,
-        }));
-
-        const nodeIds = new Set(nodes.map((n) => n.id));
-        const links = data.edges
-          .filter((e) => nodeIds.has(e.source) && nodeIds.has(e.target))
-          .map((e) => ({ source: e.source, target: e.target, type: e.type }));
-
-        setGraphData({ nodes, links });
-        setEntityCounts(data.entity_counts || {});
-
-        simNodes.current = nodes;
-        simLinks.current = links;
-        runSimulation();
-      } catch (err: any) {
-        setError(err.message || 'Failed to load knowledge graph');
-      } finally {
-        setLoading(false);
-      }
-    };
-    load();
-    return () => {
-      simRunning.current = false;
-      cancelAnimationFrame(animFrameRef.current);
-    };
-  }, [repoId]);
-
-  // ---------------------------------------------------------------------------
-  // Force-directed simulation (simple spring physics)
-  // ---------------------------------------------------------------------------
-
-  const runSimulation = useCallback(() => {
-    simRunning.current = true;
-    let alpha = 1;
-
-    const tick = () => {
-      if (!simRunning.current || alpha < 0.001) {
-        simRunning.current = false;
-        return;
-      }
-
-      const nodes = simNodes.current;
-      const links = simLinks.current;
-      const nodeMap = new Map(nodes.map((n) => [n.id, n]));
-
-      // Repulsion
-      for (let i = 0; i < nodes.length; i++) {
-        for (let j = i + 1; j < nodes.length; j++) {
-          const a = nodes[i], b = nodes[j];
-          const dx = (b.x ?? 0) - (a.x ?? 0);
-          const dy = (b.y ?? 0) - (a.y ?? 0);
-          const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-          const force = (alpha * 800) / (dist * dist);
-          a.vx! -= (dx / dist) * force;
-          a.vy! -= (dy / dist) * force;
-          b.vx! += (dx / dist) * force;
-          b.vy! += (dy / dist) * force;
-        }
-      }
-
-      // Attraction (spring)
-      for (const link of links) {
-        const src = nodeMap.get(typeof link.source === 'string' ? link.source : (link.source as any).id);
-        const tgt = nodeMap.get(typeof link.target === 'string' ? link.target : (link.target as any).id);
-        if (!src || !tgt) continue;
-        const dx = (tgt.x ?? 0) - (src.x ?? 0);
-        const dy = (tgt.y ?? 0) - (src.y ?? 0);
-        const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-        const force = (dist - 80) * alpha * 0.1;
-        src.vx! += (dx / dist) * force;
-        src.vy! += (dy / dist) * force;
-        tgt.vx! -= (dx / dist) * force;
-        tgt.vy! -= (dy / dist) * force;
-      }
-
-      // Center gravity
-      for (const n of nodes) {
-        n.vx! += -(n.x ?? 0) * alpha * 0.02;
-        n.vy! += -(n.y ?? 0) * alpha * 0.02;
-      }
-
-      // Integrate
-      for (const n of nodes) {
-        if (n.fx !== undefined && n.fx !== null) { n.x = n.fx; n.vx = 0; }
-        else { n.x = (n.x ?? 0) + (n.vx! *= 0.85); }
-        if (n.fy !== undefined && n.fy !== null) { n.y = n.fy; n.vy = 0; }
-        else { n.y = (n.y ?? 0) + (n.vy! *= 0.85); }
-      }
-
-      alpha *= 0.99;
-      drawGraph();
-      animFrameRef.current = requestAnimationFrame(tick);
-    };
-
-    animFrameRef.current = requestAnimationFrame(tick);
-  }, []);
 
   // ---------------------------------------------------------------------------
   // Canvas drawing
@@ -233,8 +132,8 @@ export function KnowledgeGraphExplorer({ repoId }: KnowledgeGraphExplorerProps) 
 
     // Draw edges
     for (const link of links) {
-      const srcId = typeof link.source === 'string' ? link.source : (link.source as any).id;
-      const tgtId = typeof link.target === 'string' ? link.target : (link.target as any).id;
+      const srcId = getEndpointId(link.source);
+      const tgtId = getEndpointId(link.target);
       const src = nodeMap.get(srcId);
       const tgt = nodeMap.get(tgtId);
       if (!src || !tgt) continue;
@@ -329,6 +228,125 @@ export function KnowledgeGraphExplorer({ repoId }: KnowledgeGraphExplorerProps) 
     ctx.restore();
   }, [visibleTypes, highlightedNodes, selectedNode]);
 
+  // ---------------------------------------------------------------------------
+  // Force-directed simulation (simple spring physics)
+  // ---------------------------------------------------------------------------
+
+  const runSimulation = useCallback(() => {
+    simRunning.current = true;
+    let alpha = 1;
+
+    const tick = () => {
+      if (!simRunning.current || alpha < 0.001) {
+        simRunning.current = false;
+        return;
+      }
+
+      const nodes = simNodes.current;
+      const links = simLinks.current;
+      const nodeMap = new Map(nodes.map((n) => [n.id, n]));
+
+      // Repulsion
+      for (let i = 0; i < nodes.length; i++) {
+        for (let j = i + 1; j < nodes.length; j++) {
+          const a = nodes[i], b = nodes[j];
+          const dx = (b.x ?? 0) - (a.x ?? 0);
+          const dy = (b.y ?? 0) - (a.y ?? 0);
+          const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+          const force = (alpha * 800) / (dist * dist);
+          a.vx! -= (dx / dist) * force;
+          a.vy! -= (dy / dist) * force;
+          b.vx! += (dx / dist) * force;
+          b.vy! += (dy / dist) * force;
+        }
+      }
+
+      // Attraction (spring)
+      for (const link of links) {
+        const src = nodeMap.get(getEndpointId(link.source));
+        const tgt = nodeMap.get(getEndpointId(link.target));
+        if (!src || !tgt) continue;
+        const dx = (tgt.x ?? 0) - (src.x ?? 0);
+        const dy = (tgt.y ?? 0) - (src.y ?? 0);
+        const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+        const force = (dist - 80) * alpha * 0.1;
+        src.vx! += (dx / dist) * force;
+        src.vy! += (dy / dist) * force;
+        tgt.vx! -= (dx / dist) * force;
+        tgt.vy! -= (dy / dist) * force;
+      }
+
+      // Center gravity
+      for (const n of nodes) {
+        n.vx! += -(n.x ?? 0) * alpha * 0.02;
+        n.vy! += -(n.y ?? 0) * alpha * 0.02;
+      }
+
+      // Integrate
+      for (const n of nodes) {
+        if (n.fx !== undefined && n.fx !== null) { n.x = n.fx; n.vx = 0; }
+        else { n.x = (n.x ?? 0) + (n.vx! *= 0.85); }
+        if (n.fy !== undefined && n.fy !== null) { n.y = n.fy; n.vy = 0; }
+        else { n.y = (n.y ?? 0) + (n.vy! *= 0.85); }
+      }
+
+      alpha *= 0.99;
+      drawGraph();
+      animFrameRef.current = requestAnimationFrame(tick);
+    };
+
+    animFrameRef.current = requestAnimationFrame(tick);
+  }, [drawGraph]);
+
+  // ---------------------------------------------------------------------------
+  // Load data
+  // ---------------------------------------------------------------------------
+
+  useEffect(() => {
+    let mounted = true;
+    const load = async () => {
+      try {
+        const data: KnowledgeGraphResponse = await api.knowledgeGraph.getGraph(repoId, 400);
+        if (!mounted) return;
+        if (!data.nodes) throw new Error('No graph data returned');
+
+        const nodes: GraphNode[] = data.nodes.map((n) => ({
+          id: n.id,
+          type: n.type || 'file',
+          name: n.name,
+          file_path: n.file_path,
+          x: Math.random() * 800 - 400,
+          y: Math.random() * 600 - 300,
+          vx: 0,
+          vy: 0,
+        }));
+
+        const nodeIds = new Set(nodes.map((n) => n.id));
+        const links: GraphLink[] = data.edges
+          .filter((e) => nodeIds.has(e.source) && nodeIds.has(e.target))
+          .map((e) => ({ source: e.source, target: e.target, type: e.type }));
+
+        setEntityCounts(data.entity_counts || {});
+
+        simNodes.current = nodes;
+        simLinks.current = links;
+        runSimulation();
+      } catch (err: unknown) {
+        if (!mounted) return;
+        const message = err instanceof Error ? err.message : 'Failed to load knowledge graph';
+        setError(message);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+    load();
+    return () => {
+      mounted = false;
+      simRunning.current = false;
+      cancelAnimationFrame(animFrameRef.current);
+    };
+  }, [repoId, runSimulation]);
+
   // Redraw when data changes
   useEffect(() => {
     if (!simRunning.current && simNodes.current.length > 0) {
@@ -380,8 +398,8 @@ export function KnowledgeGraphExplorer({ repoId }: KnowledgeGraphExplorerProps) 
       // Find connected nodes for highlight
       const connected = new Set<string>([node.id]);
       for (const link of simLinks.current) {
-        const srcId = typeof link.source === 'string' ? link.source : (link.source as any).id;
-        const tgtId = typeof link.target === 'string' ? link.target : (link.target as any).id;
+        const srcId = getEndpointId(link.source);
+        const tgtId = getEndpointId(link.target);
         if (srcId === node.id) connected.add(tgtId);
         if (tgtId === node.id) connected.add(srcId);
       }
@@ -442,21 +460,27 @@ export function KnowledgeGraphExplorer({ repoId }: KnowledgeGraphExplorerProps) 
   const resetView = () => { transform.current = { x: 0, y: 0, scale: 1 }; drawGraph(); };
   const reload = () => {
     setLoading(true);
+    setError(null);
     simRunning.current = false;
     setSelectedNode(null);
     setHighlightedNodes(new Set());
     api.knowledgeGraph.getGraph(repoId, 400).then((data) => {
-      const nodes = data.nodes.map((n) => ({
+      const nodes: GraphNode[] = data.nodes.map((n) => ({
         ...n, x: Math.random() * 800 - 400, y: Math.random() * 600 - 300, vx: 0, vy: 0,
       }));
       const nodeIds = new Set(nodes.map((n) => n.id));
-      const links = data.edges.filter((e) => nodeIds.has(e.source) && nodeIds.has(e.target));
+      const links: GraphLink[] = data.edges
+        .filter((e) => nodeIds.has(e.source) && nodeIds.has(e.target))
+        .map((e) => ({ source: e.source, target: e.target, type: e.type }));
       simNodes.current = nodes;
       simLinks.current = links;
-      setGraphData({ nodes, links });
       setEntityCounts(data.entity_counts || {});
       setLoading(false);
       runSimulation();
+    }).catch((err: unknown) => {
+      setLoading(false);
+      const message = err instanceof Error ? err.message : 'Failed to reload graph';
+      setError(message);
     });
   };
 
@@ -643,14 +667,14 @@ export function KnowledgeGraphExplorer({ repoId }: KnowledgeGraphExplorerProps) 
               <div className="space-y-1.5 max-h-56 overflow-y-auto">
                 {simLinks.current
                   .filter((l) => {
-                    const srcId = typeof l.source === 'string' ? l.source : (l.source as any).id;
-                    const tgtId = typeof l.target === 'string' ? l.target : (l.target as any).id;
+                    const srcId = getEndpointId(l.source);
+                    const tgtId = getEndpointId(l.target);
                     return srcId === selectedNode.id || tgtId === selectedNode.id;
                   })
                   .slice(0, 20)
                   .map((l, i) => {
-                    const srcId = typeof l.source === 'string' ? l.source : (l.source as any).id;
-                    const tgtId = typeof l.target === 'string' ? l.target : (l.target as any).id;
+                    const srcId = getEndpointId(l.source);
+                    const tgtId = getEndpointId(l.target);
                     const isOutgoing = srcId === selectedNode.id;
                     const otherId = isOutgoing ? tgtId : srcId;
                     const other = simNodes.current.find((n) => n.id === otherId);
@@ -665,8 +689,8 @@ export function KnowledgeGraphExplorer({ repoId }: KnowledgeGraphExplorerProps) 
                             setSelectedNode(node);
                             const connected = new Set<string>([node.id]);
                             simLinks.current.forEach((lk) => {
-                              const s = typeof lk.source === 'string' ? lk.source : (lk.source as any).id;
-                              const t = typeof lk.target === 'string' ? lk.target : (lk.target as any).id;
+                              const s = getEndpointId(lk.source);
+                              const t = getEndpointId(lk.target);
                               if (s === node.id) connected.add(t);
                               if (t === node.id) connected.add(s);
                             });

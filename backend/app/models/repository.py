@@ -1,5 +1,7 @@
+from __future__ import annotations
+
 from datetime import datetime
-from typing import Any
+from typing import Any, Optional
 
 from sqlalchemy import JSON, DateTime, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
@@ -16,7 +18,7 @@ class Repository(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     owner: Mapped[str] = mapped_column(String(255), nullable=False)
     github_url: Mapped[str] = mapped_column(String(512), unique=True, nullable=False)
-    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # Ingestion lifecycle status
     status: Mapped[str] = mapped_column(
@@ -25,30 +27,30 @@ class Repository(Base):
         default="pending",
         server_default="pending",
     )
-    status_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # Repository metadata (detected during ingestion)
-    primary_languages: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
-    num_files: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    total_loc: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    detected_frameworks: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
-    detected_databases: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
-    detected_dependencies: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    primary_languages: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    num_files: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    total_loc: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    detected_frameworks: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    detected_databases: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    detected_dependencies: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
 
     # Summary stored as JSON
-    summary_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    summary_json: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
 
     # Architecture stored as JSON
-    architecture_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    architecture_json: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
 
     # Interview Mode report stored as JSON
-    interview_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    interview_json: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
 
     # Auto-generated documentation files stored as JSON
-    docs_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    docs_json: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
 
     # Qdrant collection name (e.g. "repo_1")
-    qdrant_collection: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    qdrant_collection: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(

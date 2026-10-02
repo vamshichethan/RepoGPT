@@ -14,14 +14,14 @@ class Settings(BaseSettings):
     )
 
     # OpenAI / Gemini
-    openai_api_key: str
-    openai_base_url: str = ""
+    openai_api_key: str = ""
+    openai_base_url: str = "https://generativelanguage.googleapis.com/v1beta/openai/"
 
     # GitHub
     github_token: str = ""
 
     # Database
-    database_url: str
+    database_url: str = "postgresql+asyncpg://repogpt:repogpt@localhost:5432/repogpt"
 
     # Qdrant
     qdrant_url: str = "http://localhost:6333"

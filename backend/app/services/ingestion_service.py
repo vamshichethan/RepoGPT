@@ -464,7 +464,7 @@ async def run_ingestion(repository_id: int) -> None:
                     db,
                     repository_id,
                     "error",
-                    f"Ingestion failed: {exc}",
+                    f"Ingestion failed: {_compact_external_error(exc)}",
                 )
             except Exception:
                 pass

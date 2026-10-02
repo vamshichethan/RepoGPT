@@ -15,6 +15,6 @@ def get_openai_client() -> AsyncOpenAI:
     logger.info("Initializing AsyncOpenAI client.")
     base_url = settings.openai_base_url.strip() if settings.openai_base_url else None
     return AsyncOpenAI(
-        api_key=settings.openai_api_key,
+        api_key=settings.openai_api_key or "missing-api-key",
         base_url=base_url,
     )

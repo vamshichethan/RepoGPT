@@ -9,6 +9,7 @@ import json
 import logging
 import os
 import re
+import urllib.parse
 from collections import Counter
 from dataclasses import dataclass, field
 
@@ -174,24 +175,70 @@ class FileInfo:
 # ---------------------------------------------------------------------------
 
 
-_GITHUB_URL_RE = re.compile(
-    r"^https?://github\.com/(?P<owner>[A-Za-z0-9_.-]+)/(?P<repo>[A-Za-z0-9_.-]+?)(?:\.git)?/?$"
-)
-
-
 def parse_github_url(url: str) -> tuple[str, str]:
     """Parse a GitHub URL and return (owner, repo_name).
 
+    Robustly handles all standard and edge-case formats:
+    - https://github.com/owner/repo
+    - https://github.com/owner/repo.git
+    - https://github.com/owner/repo/
+    - https://github.com/owner/repo/tree/main/...
+    - https://github.com/owner/repo?tab=readme-ov-file
+    - https://github.com/owner/repo#readme
+    - https://www.github.com/owner/repo
+    - github.com/owner/repo
+    - git@github.com:owner/repo.git
+
     Raises:
-        ValueError: If the URL does not match the expected GitHub format.
+        ValueError: If the URL does not match a valid GitHub repository.
     """
-    match = _GITHUB_URL_RE.match(url.strip())
-    if not match:
+    raw = (url or "").strip()
+    if not raw:
+        raise ValueError("GitHub URL cannot be empty.")
+
+    # Strip fragments (#...) and query parameters (?...)
+    raw = raw.split("#")[0].split("?")[0].strip()
+
+    # Handle git SSH format: git@github.com:owner/repo.git
+    if raw.startswith("git@github.com:"):
+        path = raw[len("git@github.com:"):]
+    else:
+        # Prepend https:// if protocol is missing
+        if not re.match(r"^[a-zA-Z]+://", raw):
+            raw = "https://" + raw
+        parsed = urllib.parse.urlparse(raw)
+        hostname = (parsed.hostname or "").lower()
+        if hostname not in ("github.com", "www.github.com"):
+            raise ValueError(
+                f"Invalid GitHub URL domain: {parsed.hostname!r}. Expected github.com"
+            )
+        path = parsed.path
+
+    # Extract path segments (/owner/repo/...)
+    parts = [p for p in path.strip("/").split("/") if p]
+    if len(parts) < 2:
         raise ValueError(
-            f"Invalid GitHub URL: {url!r}. "
-            "Expected format: https://github.com/owner/repo"
+            f"Invalid GitHub repository URL: {url!r}. Expected format: https://github.com/owner/repo"
         )
-    return match.group("owner"), match.group("repo")
+
+    owner = parts[0]
+    repo = parts[1]
+    if repo.endswith(".git"):
+        repo = repo[:-4]
+
+    # Validate characters (alphanumeric, underscore, hyphen, dot)
+    if not re.match(r"^[A-Za-z0-9_.-]+$", owner) or not re.match(r"^[A-Za-z0-9_.-]+$", repo):
+        raise ValueError(
+            f"Invalid repository or owner name in GitHub URL: {url!r}"
+        )
+
+    return owner, repo
+
+
+def normalize_github_url(url: str) -> str:
+    """Normalize any GitHub URL into canonical https://github.com/owner/repo format."""
+    owner, repo = parse_github_url(url)
+    return f"https://github.com/{owner}/{repo}"
 
 
 # ---------------------------------------------------------------------------

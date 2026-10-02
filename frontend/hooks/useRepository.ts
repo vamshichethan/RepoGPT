@@ -22,8 +22,30 @@ export function useRepository() {
   }, []);
 
   useEffect(() => {
-    fetchRepositories();
-  }, [fetchRepositories]);
+    let ignore = false;
+    async function load() {
+      try {
+        const data = await api.repositories.list();
+        if (!ignore) {
+          setRepositories(Array.isArray(data) ? data : []);
+          setError(null);
+        }
+      } catch (err) {
+        if (!ignore) {
+          setError('Failed to load repositories');
+          console.error(err);
+        }
+      } finally {
+        if (!ignore) {
+          setLoading(false);
+        }
+      }
+    }
+    load();
+    return () => {
+      ignore = true;
+    };
+  }, []);
 
   const addRepository = useCallback(async (github_url: string): Promise<Repository> => {
     const repo = await api.repositories.create(github_url);

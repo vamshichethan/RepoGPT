@@ -1,5 +1,7 @@
+from __future__ import annotations
+
 from datetime import datetime
-from typing import Any
+from typing import Any, Optional
 
 from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -23,7 +25,7 @@ class Message(Base):
     content: Mapped[str] = mapped_column(Text, nullable=False)
 
     # JSON list of {file_path, chunk_index, relevance_score} citations
-    sources: Mapped[list[Any] | None] = mapped_column(JSON, nullable=True)
+    sources: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 from datetime import datetime
+from typing import Optional
 
 from sqlalchemy import DateTime, Integer, String, Text, ForeignKey, func
 from sqlalchemy.orm import Mapped, mapped_column
@@ -20,7 +23,7 @@ class GraphNode(Base):
     name: Mapped[str] = mapped_column(String(512), nullable=False)
     
     # Optional file path if it's not a file itself
-    file_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    file_path: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 

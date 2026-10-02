@@ -27,7 +27,7 @@ export function ImpactAnalyzer({ repoId }: ImpactAnalyzerProps) {
     try {
       const data = await api.productivity.getImpactAnalysis(repoId, filePath);
       setResult(data);
-    } catch (err: any) {
+    } catch (err) {
       console.error(err);
       setError('Failed to analyze impact. Please try again later.');
     } finally {

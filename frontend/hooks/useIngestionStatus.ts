@@ -20,34 +20,43 @@ export function useIngestionStatus(repoId: number | null) {
     }
   }, []);
 
-  const fetchStatus = useCallback(async (id: number) => {
-    try {
-      const data = await api.repositories.getStatus(id);
-      setStatus(data);
-      if (TERMINAL_STATUSES.includes(data.status)) {
-        stopPolling();
-      }
-    } catch (err) {
-      setError('Failed to fetch status');
-      console.error(err);
-      stopPolling();
-    } finally {
-      setLoading(false);
-    }
-  }, [stopPolling]);
-
   useEffect(() => {
     if (!repoId) return;
 
-    setLoading(true);
-    fetchStatus(repoId);
+    let ignore = false;
+
+    const poll = async () => {
+      try {
+        const data = await api.repositories.getStatus(repoId);
+        if (!ignore) {
+          setStatus(data);
+          setError(null);
+          setLoading(false);
+          if (TERMINAL_STATUSES.includes(data.status)) {
+            stopPolling();
+          }
+        }
+      } catch (err) {
+        if (!ignore) {
+          setError('Failed to fetch status');
+          console.error(err);
+          setLoading(false);
+          stopPolling();
+        }
+      }
+    };
+
+    poll();
 
     intervalRef.current = setInterval(() => {
-      fetchStatus(repoId);
+      poll();
     }, POLL_INTERVAL_MS);
 
-    return () => stopPolling();
-  }, [repoId, fetchStatus, stopPolling]);
+    return () => {
+      ignore = true;
+      stopPolling();
+    };
+  }, [repoId, stopPolling]);
 
   const isTerminal = status ? TERMINAL_STATUSES.includes(status.status) : false;
 

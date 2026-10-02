@@ -19,10 +19,9 @@ export function DependencyExplorer({ repoId }: DependencyExplorerProps) {
     let mounted = true;
     const fetchGraph = async () => {
       try {
-        setLoading(true);
         const res = await api.productivity.getDependencies(repoId);
         if (mounted) setData(res);
-      } catch (err: any) {
+      } catch (err) {
         console.error(err);
         if (mounted) setError('Failed to load dependency graph. Ensure backend processing is complete.');
       } finally {

@@ -2,14 +2,21 @@
 
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import type { Repository } from '@/lib/types';
 
 interface RepoSubmitFormProps {
   onSubmit: (url: string) => Promise<Repository>;
 }
 
-const GITHUB_URL_REGEX = /^https?:\/\/github\.com\/[\w.-]+\/[\w.-]+(\/.*)?$/;
+const GITHUB_URL_REGEX = /^(https?:\/\/)?(www\.)?github\.com\/[\w.-]+\/[\w.-]+.*$/i;
+
+function cleanGithubUrl(raw: string): string {
+  let val = raw.trim().split('#')[0].split('?')[0];
+  if (!/^https?:\/\//i.test(val)) {
+    val = 'https://' + val;
+  }
+  return val.replace(/\/+$/, '');
+}
 
 export function RepoSubmitForm({ onSubmit }: RepoSubmitFormProps) {
   const [url, setUrl] = useState('');
@@ -36,7 +43,7 @@ export function RepoSubmitForm({ onSubmit }: RepoSubmitFormProps) {
     setError(null);
 
     try {
-      const cleanUrl = url.trim().replace(/\/$/, '');
+      const cleanUrl = cleanGithubUrl(url);
       await onSubmit(cleanUrl);
     } catch (err: unknown) {
       const msg =

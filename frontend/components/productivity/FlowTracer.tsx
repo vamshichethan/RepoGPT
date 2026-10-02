@@ -27,7 +27,7 @@ export function FlowTracer({ repoId }: FlowTracerProps) {
     try {
       const data = await api.productivity.getFlowTrace(repoId, query);
       setResult(data);
-    } catch (err: any) {
+    } catch (err) {
       console.error(err);
       setError('Failed to generate flow trace. Please try again later.');
     } finally {
@@ -40,7 +40,7 @@ export function FlowTracer({ repoId }: FlowTracerProps) {
       <div className="glass p-6 rounded-2xl border border-white/10">
         <h2 className="text-xl font-semibold text-white mb-2">Code Flow Tracer</h2>
         <p className="text-white/50 text-sm mb-6">
-          Describe a functionality or business logic (e.g., "How does user login work?") to trace its execution flow across the codebase.
+          Describe a functionality or business logic (e.g., &ldquo;How does user login work?&rdquo;) to trace its execution flow across the codebase.
         </p>
         
         <form onSubmit={handleTrace} className="flex gap-3">

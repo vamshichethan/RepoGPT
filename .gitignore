@@ -4,6 +4,7 @@
 
 # ── Environment (NEVER commit secrets) ───────────────
 .env
+*.env
 .env.local
 .env.*.local
 

@@ -1,8 +1,6 @@
 'use client';
 
-import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
 import { useRepository } from '@/hooks/useRepository';
 import { RepoSubmitForm } from '@/components/repo/RepoSubmitForm';
 import { RepoCard } from '@/components/repo/RepoCard';
