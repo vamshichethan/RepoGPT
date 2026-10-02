@@ -84,13 +84,13 @@ async def get_knowledge_graph(
         graph_svc = GraphService()
         graph_data = await graph_svc.get_knowledge_graph(id, max_nodes=max_nodes)
     except Exception as exc:
-        logger.exception("Failed to fetch knowledge graph for repo %d: %s", id, exc)
-        raise HTTPException(status_code=503, detail="Knowledge graph service unavailable")
+        logger.warning("Knowledge graph unavailable for repo %d: %s", id, exc)
+        graph_data = {"nodes": [], "edges": [], "entity_counts": {}}
 
     return KnowledgeGraphResponse(
-        nodes=[KnowledgeGraphNode(**n) for n in graph_data["nodes"]],
-        edges=[KnowledgeGraphEdge(**e) for e in graph_data["edges"]],
-        entity_counts=graph_data["entity_counts"],
+        nodes=[KnowledgeGraphNode(**n) for n in graph_data.get("nodes", [])],
+        edges=[KnowledgeGraphEdge(**e) for e in graph_data.get("edges", [])],
+        entity_counts=graph_data.get("entity_counts", {}),
     )
 
 
@@ -113,13 +113,14 @@ async def search_knowledge_graph(
         # Return focused subgraph — limited traversal around query entities
         graph_data = await graph_svc.get_knowledge_graph(id, max_nodes=200)
     except Exception as exc:
-        logger.exception("Graph search failed for repo %d: %s", id, exc)
-        raise HTTPException(status_code=503, detail="Knowledge graph service unavailable")
+        logger.warning("Graph search failed for repo %d: %s", id, exc)
+        context = ""
+        graph_data = {"nodes": [], "edges": []}
 
     return GraphSearchResponse(
         context=context,
-        nodes=[KnowledgeGraphNode(**n) for n in graph_data["nodes"]],
-        edges=[KnowledgeGraphEdge(**e) for e in graph_data["edges"]],
+        nodes=[KnowledgeGraphNode(**n) for n in graph_data.get("nodes", [])],
+        edges=[KnowledgeGraphEdge(**e) for e in graph_data.get("edges", [])],
     )
 
 

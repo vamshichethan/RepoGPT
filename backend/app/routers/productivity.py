@@ -23,6 +23,11 @@ from app.services.graph_service import GraphService
 router = APIRouter(prefix="/productivity", tags=["productivity"])
 
 
+import logging
+
+logger = logging.getLogger(__name__)
+
+
 @router.post("/dependencies", response_model=DependencyResponse)
 async def get_dependencies(
     request: DependencyRequest,
@@ -34,7 +39,8 @@ async def get_dependencies(
         deps = await graph_svc.get_dependencies(request.repo_id, request.file_path)
         return DependencyResponse(dependencies=deps)
     except Exception as exc:
-        raise HTTPException(status_code=503, detail=f"Knowledge graph unavailable: {exc}")
+        logger.warning("Dependencies query failed for repo %d: %s", request.repo_id, exc)
+        return DependencyResponse(dependencies=[])
 
 
 @router.post("/impact", response_model=ImpactResponse)
@@ -48,7 +54,8 @@ async def get_impact(
         impact = await graph_svc.get_impact(request.repo_id, request.file_path)
         return ImpactResponse(impact=impact)
     except Exception as exc:
-        raise HTTPException(status_code=503, detail=f"Knowledge graph unavailable: {exc}")
+        logger.warning("Impact query failed for repo %d: %s", request.repo_id, exc)
+        return ImpactResponse(impact=[])
 
 
 @router.post("/flow", response_model=FlowResponse)
@@ -64,4 +71,5 @@ async def get_flow(
         )
         return FlowResponse(flows=flows)
     except Exception as exc:
-        raise HTTPException(status_code=503, detail=f"Knowledge graph unavailable: {exc}")
+        logger.warning("Flow query failed for repo %d: %s", request.repo_id, exc)
+        return FlowResponse(flows=[])

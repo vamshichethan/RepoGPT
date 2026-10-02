@@ -1,5 +1,6 @@
 from functools import lru_cache
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -22,6 +23,26 @@ class Settings(BaseSettings):
 
     # Database
     database_url: str = "postgresql+asyncpg://repogpt:repogpt@localhost:5432/repogpt"
+
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def assemble_db_connection(cls, v: str) -> str:
+        if isinstance(v, str):
+            v = v.strip()
+            if v.startswith("postgres://"):
+                v = "postgresql+asyncpg://" + v[len("postgres://"):]
+            elif v.startswith("postgresql://") and not v.startswith("postgresql+asyncpg://"):
+                v = "postgresql+asyncpg://" + v[len("postgresql://"):]
+            # asyncpg does not accept sslmode query parameter (it accepts ssl=...)
+            if "sslmode=" in v:
+                v = (
+                    v.replace("sslmode=require", "ssl=require")
+                    .replace("sslmode=prefer", "ssl=prefer")
+                    .replace("sslmode=disable", "")
+                )
+                if v.endswith("?") or v.endswith("&"):
+                    v = v[:-1]
+        return v
 
     # Qdrant
     qdrant_url: str = "http://localhost:6333"

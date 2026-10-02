@@ -86,11 +86,6 @@ services:
       - key: MAX_REPO_SIZE_MB
         value: "500"
 
-    disk:
-      name: workspace
-      mountPath: /app/workspace
-      sizeGB: 1           # Persistent disk for cloned repos (requires paid plan)
-
 databases:
   - name: repogpt-db
     plan: free            # 90-day free PostgreSQL on Render

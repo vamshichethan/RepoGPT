@@ -64,16 +64,21 @@ app = FastAPI(
 # Enable CORS — reads from CORS_ORIGINS env var (comma-separated list or "*")
 def _get_cors_origins() -> list[str]:
     from app.config import get_settings
-    raw = get_settings().cors_origins
-    if raw.strip() == "*":
+    raw = (get_settings().cors_origins or "*").strip()
+    if raw == "*":
         return ["*"]
-    return [o.strip() for o in raw.split(",") if o.strip()]
+    origins = [o.strip() for o in raw.split(",") if o.strip()]
+    for default_origin in ["https://repogpt-nine.vercel.app", "http://localhost:3000"]:
+        if default_origin not in origins:
+            origins.append(default_origin)
+    return origins
 
 
 _cors_origins = _get_cors_origins()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins,
+    allow_origin_regex=r"^https:\/\/.*\.vercel\.app$" if _cors_origins != ["*"] else None,
     allow_credentials=_cors_origins != ["*"],  # credentials not allowed with wildcard
     allow_methods=["*"],
     allow_headers=["*"],

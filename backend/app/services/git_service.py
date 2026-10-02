@@ -253,19 +253,48 @@ def clone_repository(
 ) -> None:
     """Clone a GitHub repository to *target_dir* using GitPython.
 
-    If *github_token* is provided it is embedded in the clone URL so that
-    private repositories can be accessed.
+    First attempts clone with *github_token* (if provided) for private repo access.
+    If that fails due to authentication or permissions (common when a fine-grained
+    personal access token lacks scope for another user's public repository),
+    it immediately falls back to a clean unauthenticated clone.
 
     Raises:
-        git.GitCommandError: On clone failure.
+        git.GitCommandError: If cloning fails under both authenticated and unauthenticated attempts.
     """
-    clone_url = github_url
-    if github_token:
-        # Embed token: https://<token>@github.com/owner/repo
-        clone_url = github_url.replace("https://", f"https://{github_token}@", 1)
+    import shutil
 
-    logger.info("Cloning %s -> %s", github_url, target_dir)
-    git.Repo.clone_from(clone_url, target_dir, depth=1)
+    # Ensure target directory is clean and ready
+    if os.path.exists(target_dir):
+        shutil.rmtree(target_dir, ignore_errors=True)
+    os.makedirs(target_dir, exist_ok=True)
+
+    clean_url = github_url.strip()
+    if not clean_url.endswith(".git"):
+        clean_url = f"{clean_url}.git"
+
+    git_env = {"GIT_TERMINAL_PROMPT": "0"}
+
+    # Attempt with token if provided
+    if github_token and github_token.strip():
+        token = github_token.strip()
+        auth_url = clean_url.replace("https://", f"https://x-access-token:{token}@", 1)
+        try:
+            logger.info("Attempting clone with credentials: %s -> %s", clean_url, target_dir)
+            git.Repo.clone_from(auth_url, target_dir, depth=1, env=git_env)
+            logger.info("Clone complete with credentials: %s", target_dir)
+            return
+        except git.GitCommandError as exc:
+            logger.warning(
+                "Authenticated clone failed (%s). Retrying unauthenticated clone for public repo...",
+                exc,
+            )
+            if os.path.exists(target_dir):
+                shutil.rmtree(target_dir, ignore_errors=True)
+            os.makedirs(target_dir, exist_ok=True)
+
+    # Standard public clone
+    logger.info("Cloning public repository unauthenticated: %s -> %s", clean_url, target_dir)
+    git.Repo.clone_from(clean_url, target_dir, depth=1, env=git_env)
     logger.info("Clone complete: %s", target_dir)
 
 
