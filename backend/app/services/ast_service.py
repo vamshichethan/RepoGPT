@@ -140,8 +140,6 @@ class AstService:
         # --- Python queries ---
         self.py_import_query = self.python_lang.query("""
             (import_statement name: (dotted_name) @module)
-            (import_from_statement module_name: (dotted_name) @module
-                                   name: (import_from_names) @symbols)
             (import_from_statement module_name: (dotted_name) @module)
         """)
         self.py_class_query = self.python_lang.query("""

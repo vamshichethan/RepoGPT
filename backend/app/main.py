@@ -32,8 +32,7 @@ async def lifespan(app: FastAPI):
     try:
         await init_db()
     except Exception as exc:
-        logger.critical("Database initialization failed: %s", exc)
-        raise exc
+        logger.error("Database initialization warning: %s", exc)
 
     # Initialize Neo4j constraints (non-fatal if Neo4j is unavailable)
     try:

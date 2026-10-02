@@ -13,6 +13,8 @@ All status updates are written back to PostgreSQL so the frontend can poll
 for real-time progress.
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
 import os

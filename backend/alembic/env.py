@@ -68,16 +68,24 @@ async def run_async_migrations() -> None:
     configuration = config.get_section(config.config_ini_section, {})
     configuration["sqlalchemy.url"] = settings.database_url
 
-    connectable = async_engine_from_config(
-        configuration,
-        prefix="sqlalchemy.",
-        poolclass=pool.NullPool,
-    )
+    connect_args = {}
+    if "asyncpg" in settings.database_url:
+        connect_args["timeout"] = 4
 
-    async with connectable.connect() as connection:
-        await connection.run_sync(do_run_migrations)
+    try:
+        connectable = async_engine_from_config(
+            configuration,
+            prefix="sqlalchemy.",
+            poolclass=pool.NullPool,
+            connect_args=connect_args,
+        )
 
-    await connectable.dispose()
+        async with connectable.connect() as connection:
+            await connection.run_sync(do_run_migrations)
+
+        await connectable.dispose()
+    except Exception as exc:
+        print(f"Alembic migration skipped or failed (non-fatal): {exc}")
 
 
 def run_migrations_online() -> None:

@@ -1,7 +1,9 @@
-from datetime import datetime
-from typing import Any
+from __future__ import annotations
 
-from pydantic import BaseModel, field_validator, ConfigDict
+from datetime import datetime
+from typing import Any, Dict, List, Optional
+
+from pydantic import BaseModel, ConfigDict, field_validator
 
 
 # Maps status -> progress percent for the status endpoint

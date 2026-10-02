@@ -29,6 +29,7 @@ frontend/tsconfig.tsbuildinfo
 snapshots/
 storage/
 .qdrant-initialized
+*.db
 
 # ── Docker ───────────────────────────────────────────
 .docker/
