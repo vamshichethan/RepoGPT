@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useRef } from 'react';
-import { api } from '@/lib/api';
+import { api, API_BASE } from '@/lib/api';
 import type { Message, ChatSession } from '@/lib/types';
 
 interface UseChatOptions {
@@ -90,7 +90,7 @@ export function useChat({ repoId }: UseChatOptions) {
 
       try {
         const response = await fetch(
-          `/api/sessions/${currentSession.id}/messages`,
+          `${API_BASE}/api/sessions/${currentSession.id}/messages`,
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

@@ -1,9 +1,8 @@
 import type { Repository, IngestionStatus, Summary, ChatSession, Message, Architecture, DependencyGraphResponse, FlowTraceResponse, ImpactAnalysisResponse, InterviewReport, DocsResponse, PRReviewResponse, KnowledgeGraphResponse, GraphSearchResponse, EntityCountsResponse } from './types';
 
-const API_BASE =
-  typeof window !== 'undefined'
-    ? ''
-    : (process.env.NEXT_PUBLIC_API_URL || 'https://repogpt-backend-shf2.onrender.com').replace(/\/+$/, '');
+export const API_BASE = (
+  process.env.NEXT_PUBLIC_API_URL || 'https://repogpt-backend-shf2.onrender.com'
+).replace(/\/+$/, '');
 
 async function handleResponse<T>(res: Response): Promise<T> {
   if (!res.ok) {

@@ -25,10 +25,14 @@ export function useIngestionStatus(repoId: number | null) {
 
     let ignore = false;
 
+    let consecutiveFailures = 0;
+    const MAX_FAILURES = 5;
+
     const poll = async () => {
       try {
         const data = await api.repositories.getStatus(repoId);
         if (!ignore) {
+          consecutiveFailures = 0;
           setStatus(data);
           setError(null);
           setLoading(false);
@@ -38,10 +42,13 @@ export function useIngestionStatus(repoId: number | null) {
         }
       } catch (err) {
         if (!ignore) {
-          setError('Failed to fetch status');
-          console.error(err);
-          setLoading(false);
-          stopPolling();
+          consecutiveFailures += 1;
+          console.warn(`Status polling failed (attempt ${consecutiveFailures}/${MAX_FAILURES}):`, err);
+          if (consecutiveFailures >= MAX_FAILURES) {
+            setError('Failed to fetch status after multiple attempts. Please check backend connection.');
+            setLoading(false);
+            stopPolling();
+          }
         }
       }
     };
