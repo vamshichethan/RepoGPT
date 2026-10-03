@@ -59,7 +59,7 @@ export async function proxyRequest(request: NextRequest, { params }: { params: P
       body: JSON.stringify({ content: userQuery }),
     }).catch(() => {});
 
-    return streamFallbackChat(userQuery, sessionId);
+    return streamFallbackChat(userQuery);
   }
 
   try {
@@ -342,20 +342,10 @@ async function generateFallbackGraph(repoId: string | number) {
   return { nodes, edges, entity_counts };
 }
 
-async function streamFallbackChat(userQuery: string, sessionId?: string): Promise<Response> {
-  let repoContext = 'octocat/Spoon-Knife (HTML5, CSS3, README.md)';
-  try {
-    const reposRes = await fetch(`${BACKEND_URL}/api/repositories`);
-    if (reposRes.ok) {
-      const repos = await reposRes.json();
-      if (repos && repos.length > 0) {
-        const r = repos[0];
-        repoContext = `${r.owner}/${r.name} (${(r.primary_languages || []).join(', ') || 'HTML, CSS'}). Total files: ${r.num_files || 3}, LOC: ${r.total_loc || 49}. Purpose: ${r.description || r.summary_json?.project_purpose || 'Git fork demonstration repo'}. Key files: index.html, styles.css, README.md`;
-      }
-    }
-  } catch {}
-
+function streamFallbackChat(userQuery: string): Response {
   const encoder = new TextEncoder();
+  const repoContext = 'octocat/Spoon-Knife (HTML5, CSS3, README.md). 3 files, 49 lines of code.';
+
   const stream = new ReadableStream({
     async start(controller) {
       try {
@@ -400,8 +390,9 @@ Instructions:
   return new Response(stream, {
     headers: {
       'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
+      'Cache-Control': 'no-cache, no-transform',
       'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no',
     },
   });
 }
