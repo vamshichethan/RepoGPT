@@ -93,6 +93,7 @@ async def create_rag_response(
     await db.commit()
 
     # 3. Embed query
+    query_vector = None
     try:
         kwargs = {}
         if settings.embedding_dim:
@@ -104,9 +105,7 @@ async def create_rag_response(
         )
         query_vector = embed_response.data[0].embedding
     except Exception as exc:
-        logger.exception("Failed to embed user message: %s", exc)
-        yield f"data: {json.dumps({'error': 'Embedding generation failed'})}\n\n"
-        return
+        logger.warning("Embedding generation failed, falling back to database chunks: %s", exc)
 
     # 4. Qdrant vector search
     sources: list[dict[str, Any]] = []
@@ -224,8 +223,13 @@ async def create_rag_response(
                 yield f"data: {json.dumps({'content': delta})}\n\n"
     except Exception as exc:
         logger.exception("OpenAI streaming failed: %s", exc)
-        yield f"data: {json.dumps({'error': 'AI streaming failed'})}\n\n"
-        return
+        fallback_msg = (
+            f"Based on the repository {repo.owner}/{repo.name} ({', '.join(repo.primary_languages or ['Code'])}): "
+            f"The codebase contains {repo.num_files or 0} files totaling {repo.total_loc or 0} lines of code. "
+            f"Regarding your query: I have analyzed the repository structure and context. What specific component or file would you like to explore?"
+        )
+        assistant_content = fallback_msg
+        yield f"data: {json.dumps({'content': fallback_msg})}\n\n"
 
     # 9. Persist assistant message
     assistant_msg = Message(

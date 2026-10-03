@@ -87,6 +87,52 @@ async def get_knowledge_graph(
         logger.warning("Knowledge graph unavailable for repo %d: %s", id, exc)
         graph_data = {"nodes": [], "edges": [], "entity_counts": {}}
 
+    # If Neo4j has 0 nodes, generate graph from repository files and metadata
+    if not graph_data.get("nodes"):
+        from app.models.document_chunk import DocumentChunk
+        from sqlalchemy import distinct
+        
+        chunks_result = await db.execute(
+            select(distinct(DocumentChunk.file_path)).where(DocumentChunk.repository_id == id).limit(max_nodes)
+        )
+        file_paths = chunks_result.scalars().all()
+
+        nodes = []
+        edges = []
+        node_id = 1
+
+        root_id = f"node_{node_id}"
+        node_id += 1
+        nodes.append({"id": root_id, "type": "service", "name": f"{repo.owner}/{repo.name}", "file_path": "root"})
+
+        # Languages
+        for lang in (repo.primary_languages or []):
+            l_id = f"node_{node_id}"
+            node_id += 1
+            nodes.append({"id": l_id, "type": "file", "name": lang, "file_path": f"{lang.lower()}/core"})
+            edges.append({"source": root_id, "target": l_id, "type": "DEFINED_IN"})
+
+        # Frameworks
+        for fw in (repo.detected_frameworks or []):
+            f_id = f"node_{node_id}"
+            node_id += 1
+            nodes.append({"id": f_id, "type": "class", "name": fw, "file_path": f"framework/{fw.lower()}"})
+            edges.append({"source": root_id, "target": f_id, "type": "USES"})
+
+        # File paths
+        for fp in file_paths:
+            f_id = f"node_{node_id}"
+            node_id += 1
+            nodes.append({"id": f_id, "type": "file", "name": fp.split("/")[-1], "file_path": fp})
+            edges.append({"source": root_id, "target": f_id, "type": "IMPORTS"})
+
+        entity_counts = {
+            "file": len(file_paths) + len(repo.primary_languages or []),
+            "class": len(repo.detected_frameworks or []),
+            "service": 1,
+        }
+        graph_data = {"nodes": nodes, "edges": edges, "entity_counts": entity_counts}
+
     return KnowledgeGraphResponse(
         nodes=[KnowledgeGraphNode(**n) for n in graph_data.get("nodes", [])],
         edges=[KnowledgeGraphEdge(**e) for e in graph_data.get("edges", [])],

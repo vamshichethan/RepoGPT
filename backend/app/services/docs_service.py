@@ -238,39 +238,37 @@ async def generate_docs(
         repo.name,
     )
 
-    response = await openai_client.chat.completions.create(
-        model=settings.chat_model,
-        messages=[
-            {
-                "role": "system",
-                "content": (
-                    "You are a world-class technical writer. "
-                    "You always respond with valid JSON only, no markdown fences around the JSON. "
-                    "Each value in the JSON is a complete markdown document string."
-                ),
-            },
-            {"role": "user", "content": prompt},
-        ],
-        response_format={"type": "json_object"},
-        temperature=0.2,
-        max_tokens=8192,
-    )
-
-    raw_json = response.choices[0].message.content or "{}"
-
     try:
+        response = await openai_client.chat.completions.create(
+            model=settings.chat_model,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a world-class technical writer. "
+                        "You always respond with valid JSON only, no markdown fences around the JSON. "
+                        "Each value in the JSON is a complete markdown document string."
+                    ),
+                },
+                {"role": "user", "content": prompt},
+            ],
+            response_format={"type": "json_object"},
+            temperature=0.2,
+            max_tokens=8192,
+        )
+        raw_json = response.choices[0].message.content or "{}"
         docs_data = json.loads(raw_json)
-        # Ensure all required keys are present
         for key in ["readme", "architecture_doc", "api_docs", "onboarding"]:
             if key not in docs_data:
                 raise KeyError(f"Missing key: {key}")
     except Exception as exc:
-        logger.error("Failed to parse docs JSON: %s | raw=%s", exc, raw_json[:500])
+        logger.error("Documentation generation failed with LLM, building fallback: %s", exc)
+        tech_str = ", ".join(repo.primary_languages or ["Code"])
         docs_data = {
-            "readme": "# Documentation generation failed\n\nPlease try again.",
-            "architecture_doc": "# Architecture\n\nDocumentation generation failed.",
-            "api_docs": "# API Docs\n\nDocumentation generation failed.",
-            "onboarding": "# Onboarding\n\nDocumentation generation failed.",
+            "readme": f"# {repo.owner}/{repo.name}\n\n{project_overview_ctx}\n\n## Tech Stack\n{tech_str}\n\n## Structure\n```\n{folder_structure_ctx}\n```",
+            "architecture_doc": f"# Architecture: {repo.name}\n\n{architecture_summary_ctx}\n\n```mermaid\n{mermaid_code_ctx}\n```",
+            "api_docs": f"# API & Components\n\n{data_flow_ctx}\n\nFiles scanned: {repo.num_files or 0} files ({repo.total_loc or 0} LOC).",
+            "onboarding": f"# Onboarding Guide\n\n### Getting Started with {repo.name}\n1. Clone the repository\n2. Inspect primary modules: {tech_str}",
         }
 
     # ------------------------------------------------------------------

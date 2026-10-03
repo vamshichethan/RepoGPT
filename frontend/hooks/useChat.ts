@@ -127,6 +127,10 @@ export function useChat({ repoId }: UseChatOptions) {
                 if (data === '[DONE]') break;
                 try {
                   const parsed = JSON.parse(data);
+                  if (parsed.error) {
+                    fullContent += `⚠️ ${parsed.error}`;
+                    setStreamingContent(fullContent);
+                  }
                   if (parsed.content) {
                     fullContent += parsed.content;
                     setStreamingContent(fullContent);
@@ -151,7 +155,7 @@ export function useChat({ repoId }: UseChatOptions) {
             id: Date.now() + 1,
             session_id: currentSession.id,
             role: 'assistant',
-            content: fullContent,
+            content: fullContent.trim() || 'No response generated. Please check query or try again.',
             sources,
             created_at: new Date().toISOString(),
           };

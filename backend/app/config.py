@@ -16,6 +16,11 @@ class Settings(BaseSettings):
 
     # OpenAI / Gemini
     openai_api_key: str = ""
+    gemini_api_key: str = ""
+    gemini_api_key_2: str = ""
+    gemini_api_key_3: str = ""
+    gemini_api_key_4: str = ""
+    gemini_api_key_5: str = ""
     openai_base_url: str = "https://generativelanguage.googleapis.com/v1beta/openai/"
 
     # GitHub
@@ -67,10 +72,10 @@ class Settings(BaseSettings):
     max_repo_size_mb: int = 500
 
     # Model names
-    embedding_model: str = "text-embedding-3-small"
-    embedding_dim: int = 1536
-    chat_model: str = "gpt-4o"
-    summary_model: str = "gpt-4o"
+    embedding_model: str = "gemini-embedding-001"
+    embedding_dim: int = 768
+    chat_model: str = "gemini-2.5-flash"
+    summary_model: str = "gemini-2.5-flash"
 
     # Chunking
     chunk_size: int = 1000
