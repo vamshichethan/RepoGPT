@@ -4,7 +4,6 @@ import { useEffect, useRef } from 'react';
 import { useChat } from '@/hooks/useChat';
 import { ChatMessage } from './ChatMessage';
 import { ChatInput } from './ChatInput';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 
@@ -41,10 +40,7 @@ export function ChatPanel({ repoId }: ChatPanelProps) {
   // Scroll to bottom on new messages
   useEffect(() => {
     if (scrollRef.current) {
-      const scrollContainer = scrollRef.current.querySelector('[data-radix-scroll-area-viewport]');
-      if (scrollContainer) {
-        scrollContainer.scrollTop = scrollContainer.scrollHeight;
-      }
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages, streamingContent]);
 
@@ -71,8 +67,11 @@ export function ChatPanel({ repoId }: ChatPanelProps) {
         </Button>
       </div>
 
-      {/* Message List area */}
-      <ScrollArea ref={scrollRef} className="flex-1 min-h-[440px] bg-black/10">
+      {/* Message List area (Native scrollable container) */}
+      <div
+        ref={scrollRef}
+        className="flex-1 min-h-[440px] overflow-y-auto bg-black/10 scrollbar-thin scrollbar-thumb-white/10"
+      >
         <div className="flex flex-col">
           {messages.length === 0 && !streaming && !loading && (
             /* Welcome and Prompt suggestion panel */
@@ -130,7 +129,7 @@ export function ChatPanel({ repoId }: ChatPanelProps) {
             </div>
           )}
         </div>
-      </ScrollArea>
+      </div>
 
       {/* Input panel at bottom */}
       <div className="p-4 border-t border-white/5 bg-black/20">
