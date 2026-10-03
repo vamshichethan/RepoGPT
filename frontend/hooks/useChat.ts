@@ -114,38 +114,35 @@ export function useChat({ repoId }: UseChatOptions) {
           let fullContent = '';
           let sources: Message['sources'] = [];
 
+          let buffer = '';
           while (true) {
             const { done, value } = await reader.read();
             if (done) break;
 
-            const chunk = decoder.decode(value, { stream: true });
-            const lines = chunk.split('\n');
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
 
             for (const line of lines) {
-              if (line.startsWith('data: ')) {
-                const data = line.slice(6).trim();
-                if (data === '[DONE]') break;
-                try {
-                  const parsed = JSON.parse(data);
-                  if (parsed.error) {
-                    fullContent += `⚠️ ${parsed.error}`;
-                    setStreamingContent(fullContent);
-                  }
-                  if (parsed.content) {
-                    fullContent += parsed.content;
-                    setStreamingContent(fullContent);
-                  }
-                  if (parsed.sources) {
-                    sources = parsed.sources;
-                  }
-                  if (parsed.done) {
-                    break;
-                  }
-                } catch {
-                  // Plain text chunk
-                  fullContent += data;
+              const trimmed = line.trim();
+              if (!trimmed.startsWith('data: ')) continue;
+              const data = trimmed.slice(6).trim();
+              if (data === '[DONE]') break;
+              try {
+                const parsed = JSON.parse(data);
+                if (parsed.error) {
+                  fullContent += `⚠️ ${parsed.error}`;
                   setStreamingContent(fullContent);
                 }
+                if (parsed.content) {
+                  fullContent += parsed.content;
+                  setStreamingContent(fullContent);
+                }
+                if (parsed.sources) {
+                  sources = parsed.sources;
+                }
+              } catch {
+                // Malformed line fragment
               }
             }
           }

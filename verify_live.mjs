@@ -19,8 +19,15 @@ async function run() {
   await page.goto('https://repogpt-nine.vercel.app/repo/1', { waitUntil: 'networkidle2', timeout: 30000 });
 
   // 1. CHAT TAB VERIFICATION
-  console.log('Verifying Chat...');
-  // Find textarea or input
+  console.log('Switching to Chat tab...');
+  await page.waitForSelector('button', { timeout: 10000 });
+  await page.evaluate(() => {
+    const buttons = Array.from(document.querySelectorAll('button'));
+    const chatBtn = buttons.find((b) => b.textContent?.includes('Chat'));
+    if (chatBtn) chatBtn.click();
+  });
+
+  console.log('Verifying Chat input...');
   const inputSelector = 'input[placeholder*="Ask anything"], textarea[placeholder*="Ask anything"]';
   await page.waitForSelector(inputSelector, { timeout: 10000 });
   await page.type(inputSelector, 'wt changes to make');
