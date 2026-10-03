@@ -302,11 +302,11 @@ export default function RepoPage({ params }: PageProps) {
                 </TabsContent>
 
                 <TabsContent value="interview">
-                  <InterviewPanel repoId={repoId} />
+                  <InterviewPanel repoId={repoId} repo={repo} />
                 </TabsContent>
 
                 <TabsContent value="docs">
-                  <DocsPanel repoId={repoId} />
+                  <DocsPanel repoId={repoId} repo={repo} />
                 </TabsContent>
 
                 <TabsContent value="review">

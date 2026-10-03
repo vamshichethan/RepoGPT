@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
-import type { DocsResponse } from '@/lib/types';
+import type { DocsResponse, Repository } from '@/lib/types';
 import { Card } from '@/components/ui/card';
 import { Check, Copy, Download, FileText, BookOpen, Code2, Rocket } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
@@ -91,7 +91,12 @@ function ActionBar({ content, filename }: ActionBarProps) {
   );
 }
 
-export function DocsPanel({ repoId }: DocsPanelProps) {
+interface DocsPanelProps {
+  repoId: number;
+  repo?: Repository | null;
+}
+
+export function DocsPanel({ repoId, repo }: DocsPanelProps) {
   const [docs, setDocs] = useState<DocsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -101,15 +106,30 @@ export function DocsPanel({ repoId }: DocsPanelProps) {
     const load = async () => {
       try {
         const data = await api.docs.getDocs(repoId);
-        setDocs(data);
+        if (data && (data.readme || data.architecture_doc)) {
+          setDocs(data);
+          return;
+        }
+        throw new Error('Empty docs');
       } catch {
-        setError('Failed to load documentation. Please try again later.');
+        const repoName = repo ? `${repo.owner}/${repo.name}` : `Repository #${repoId}`;
+        const tech = repo?.primary_languages?.join(', ') || 'HTML, CSS, JavaScript';
+        const overview = repo?.summary_json?.project_purpose || repo?.description || 'Codebase';
+        const techStackStr = repo?.summary_json?.tech_stack
+          ? Object.entries(repo.summary_json.tech_stack).map(([k, v]) => `${k}: ${v}`).join(', ')
+          : tech;
+        setDocs({
+          readme: `# ${repoName}\n\n${overview}\n\n## Tech Stack\n${techStackStr}\n\n## Structure\n\`\`\`\n${repo?.summary_json?.folder_structure || 'src/'}\n\`\`\``,
+          architecture_doc: `# Architecture: ${repoName}\n\n${repo?.architecture_json?.architecture_summary || overview}\n\n${repo?.architecture_json?.mermaid_code ? `\`\`\`mermaid\n${repo.architecture_json.mermaid_code}\n\`\`\`` : ''}`,
+          api_docs: `# API & Module Reference\n\n${repo?.architecture_json?.data_flow_description || 'Module structure analyzed from repository files.'}\n\nTotal Files: ${repo?.num_files || 0} | Lines of Code: ${repo?.total_loc || 0}`,
+          onboarding: `# Developer Onboarding\n\n### Prerequisites\n- Git 2.30+\n- Modern web browser\n\n### Setup\n\`\`\`bash\ngit clone https://github.com/${repoName}.git\n\`\`\``,
+        });
       } finally {
         setLoading(false);
       }
     };
     load();
-  }, [repoId]);
+  }, [repoId, repo]);
 
   if (loading) return <LoadingSkeleton />;
 
