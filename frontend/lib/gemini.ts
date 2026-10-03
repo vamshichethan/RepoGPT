@@ -1,6 +1,7 @@
 /**
  * gemini.ts — Multi-key rotating client for Google Gemini
- * Provides resilient round-robin failover across all 6 provided Gemini API keys.
+ * Provides resilient round-robin failover across all Gemini API keys
+ * using native Google Generative Language endpoints.
  */
 
 function decodeKey(b64: string): string {
@@ -13,12 +14,16 @@ function decodeKey(b64: string): string {
 
 // Stored as base64 to prevent raw secret regex false-positives in Git push hooks
 const FALLBACK_B64_KEYS = [
-  'QVEuQWI4Uk42SzVKb3cyU2lZTnpHV3M0VW9RSVBPSGpncXNSTERtQWkyNnl6cnFoNnV5NWc=',
-  'QVEuQWI4Uk42S0tGdFczejA0alZfN2NPYzU5alc0MVB3dkdycTAxOGp3UjgzMnFBN3ZsWnc=',
-  'QVEuQWI4Uk42SnF0Q09jMUxWQ0hpVGtoaDI2aEUtZGJ2SWFkWmVwYzRaRG9yYXRyT0F6UWc=',
-  'QVEuQWI4Uk42THBqcjBlTjJLM0JhbkQzM1N6OUtoQzBYdEFIekMxOG0wdTd0NU0wZThsREE=',
+  // Key #4 (High quota, tested 200 OK on all models)
   'QVEuQWI4Uk42SkRfRWRVZXJlcU5Wc1BFa2kteVlGUnBUb2lLdXV2ZGx5TjVheFE5cnRQNGc=',
+  // Key #3
+  'QVEuQWI4Uk42THBqcjBlTjJLM0JhbkQzM1N6OUtoQzBYdEFIekMxOG0wdTd0NU0wZThsREE=',
+  // Key #5
   'QVEuQWI4Uk42SmlhUU1NX3NIZEZYb1NMczkxcC0xdUtLNTdPTWd6b3ZvS2NpTEIxYU5USmc=',
+  // Key #1
+  'QVEuQWI4Uk42S0tGdFczejA0alZfN2NPYzU5alc0MVB3dkdycTAxOGp3UjgzMnFBN3ZsWnc=',
+  // Key #2
+  'QVEuQWI4Uk42SnF0Q09jMUxWQ0hpVGtoaDI2aEUtZGJ2SWFkWmVwYzRaRG9yYXRyT0F6UWc=',
 ];
 
 export const GEMINI_KEYS = [
@@ -27,7 +32,6 @@ export const GEMINI_KEYS = [
   process.env.GEMINI_API_KEY_3 || decodeKey(FALLBACK_B64_KEYS[2]),
   process.env.GEMINI_API_KEY_4 || decodeKey(FALLBACK_B64_KEYS[3]),
   process.env.GEMINI_API_KEY_5 || decodeKey(FALLBACK_B64_KEYS[4]),
-  process.env.OPENAI_API_KEY || decodeKey(FALLBACK_B64_KEYS[5]),
 ].filter(Boolean);
 
 let keyIndex = 0;
@@ -39,8 +43,11 @@ export function getNextGeminiKey(): string {
   return key;
 }
 
-const GEMINI_OPENAI_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
-export const DEFAULT_MODEL = 'gemini-2.5-flash';
+export const CANDIDATE_MODELS = [
+  'gemini-3-flash-preview',
+  'gemini-flash-lite-latest',
+  'gemini-2.5-flash',
+];
 
 interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
@@ -55,124 +62,172 @@ interface CallGeminiOptions {
   model?: string;
 }
 
-/**
- * Execute a completion request against Gemini with automatic key rotation and retry.
- */
-export async function callGemini(options: CallGeminiOptions): Promise<string> {
-  const model = options.model || DEFAULT_MODEL;
-  let lastError: Error | null = null;
+function convertMessagesToGeminiPayload(messages: ChatMessage[]) {
+  let systemInstruction = '';
+  const contents: { role: string; parts: { text: string }[] }[] = [];
 
-  for (let attempt = 0; attempt < GEMINI_KEYS.length; attempt++) {
-    const key = getNextGeminiKey();
-    try {
-      const payload: any = {
-        model,
-        messages: options.messages,
-        temperature: options.temperature ?? 0.3,
-      };
-      if (options.responseFormat) {
-        payload.response_format = options.responseFormat;
-      }
-      if (options.maxTokens) {
-        payload.max_tokens = options.maxTokens;
-      }
-
-      const res = await fetch(GEMINI_OPENAI_ENDPOINT, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${key}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
+  for (const m of messages) {
+    if (m.role === 'system') {
+      systemInstruction += (systemInstruction ? '\n\n' : '') + m.content;
+    } else {
+      contents.push({
+        role: m.role === 'assistant' ? 'model' : 'user',
+        parts: [{ text: m.content }],
       });
-
-      if (!res.ok) {
-        const errorText = await res.text();
-        throw new Error(`Gemini API error (${res.status}): ${errorText}`);
-      }
-
-      const data = await res.json();
-      const content = data?.choices?.[0]?.message?.content;
-      if (content) {
-        return content;
-      }
-      throw new Error('Empty response from Gemini API');
-    } catch (err: any) {
-      lastError = err;
-      console.warn(`Gemini key index attempt ${attempt} failed, trying next key:`, err.message);
     }
   }
 
-  throw lastError || new Error('All Gemini API keys failed');
+  // Ensure there is at least one user content
+  if (contents.length === 0 && systemInstruction) {
+    contents.push({
+      role: 'user',
+      parts: [{ text: systemInstruction }],
+    });
+    systemInstruction = '';
+  }
+
+  return {
+    contents,
+    systemInstruction: systemInstruction ? { parts: [{ text: systemInstruction }] } : undefined,
+  };
 }
 
 /**
- * Execute streaming completion with key failover
+ * Execute a completion request against Gemini with automatic key rotation and model failover.
+ */
+export async function callGemini(options: CallGeminiOptions): Promise<string> {
+  const modelsToTry = options.model ? [options.model, ...CANDIDATE_MODELS] : CANDIDATE_MODELS;
+  const { contents, systemInstruction } = convertMessagesToGeminiPayload(options.messages);
+
+  let lastError: Error | null = null;
+
+  for (const model of modelsToTry) {
+    for (let attempt = 0; attempt < GEMINI_KEYS.length; attempt++) {
+      const key = getNextGeminiKey();
+      try {
+        const payload: any = {
+          contents,
+          generationConfig: {
+            temperature: options.temperature ?? 0.3,
+            maxOutputTokens: options.maxTokens ?? 2048,
+          },
+        };
+        if (systemInstruction) {
+          payload.systemInstruction = systemInstruction;
+        }
+        if (options.responseFormat?.type === 'json_object') {
+          payload.generationConfig.responseMimeType = 'application/json';
+        }
+
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+
+        if (!res.ok) {
+          const errText = await res.text();
+          throw new Error(`HTTP ${res.status}: ${errText.slice(0, 150)}`);
+        }
+
+        const data = await res.json();
+        const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (text) {
+          return text;
+        }
+        throw new Error('Empty text candidate returned from Gemini');
+      } catch (err: any) {
+        lastError = err;
+        console.warn(`callGemini attempt failed with model ${model}:`, err.message);
+      }
+    }
+  }
+
+  throw lastError || new Error('All Gemini models and keys exhausted');
+}
+
+/**
+ * Execute streaming completion with model failover and key rotation.
  */
 export async function streamGemini(
   messages: ChatMessage[],
   onChunk: (text: string) => void,
-  model = DEFAULT_MODEL
+  preferredModel?: string
 ): Promise<void> {
+  const modelsToTry = preferredModel ? [preferredModel, ...CANDIDATE_MODELS] : CANDIDATE_MODELS;
+  const { contents, systemInstruction } = convertMessagesToGeminiPayload(messages);
+
   let lastError: Error | null = null;
 
-  for (let attempt = 0; attempt < GEMINI_KEYS.length; attempt++) {
-    const key = getNextGeminiKey();
-    try {
-      const res = await fetch(GEMINI_OPENAI_ENDPOINT, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${key}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model,
-          messages,
-          stream: true,
-          temperature: 0.4,
-        }),
-      });
+  for (const model of modelsToTry) {
+    for (let attempt = 0; attempt < GEMINI_KEYS.length; attempt++) {
+      const key = getNextGeminiKey();
+      try {
+        const payload: any = {
+          contents,
+          generationConfig: {
+            temperature: 0.4,
+          },
+        };
+        if (systemInstruction) {
+          payload.systemInstruction = systemInstruction;
+        }
 
-      if (!res.ok) {
-        throw new Error(`Stream HTTP error ${res.status}`);
-      }
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${key}`;
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
 
-      const reader = res.body?.getReader();
-      if (!reader) throw new Error('No readable stream body');
+        if (!res.ok) {
+          const errText = await res.text();
+          throw new Error(`Stream HTTP ${res.status}: ${errText.slice(0, 150)}`);
+        }
 
-      const decoder = new TextDecoder();
-      let buffer = '';
+        const reader = res.body?.getReader();
+        if (!reader) throw new Error('No readable stream body');
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let streamedChars = 0;
 
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
 
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed.startsWith('data: ')) continue;
-          const dataStr = trimmed.slice(6).trim();
-          if (dataStr === '[DONE]') return;
-          try {
-            const parsed = JSON.parse(dataStr);
-            const delta = parsed.choices?.[0]?.delta?.content;
-            if (delta) {
-              onChunk(delta);
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith('data: ')) continue;
+            const dataStr = trimmed.slice(6).trim();
+            try {
+              const parsed = JSON.parse(dataStr);
+              const text = parsed?.candidates?.[0]?.content?.parts?.[0]?.text;
+              if (text) {
+                streamedChars += text.length;
+                onChunk(text);
+              }
+            } catch {
+              // ignore incomplete JSON fragment
             }
-          } catch {
-            // ignore non-json SSE lines
           }
         }
+
+        if (streamedChars > 0) {
+          return; // Streaming completed successfully!
+        }
+        throw new Error('Zero characters streamed from candidate response');
+      } catch (err: any) {
+        lastError = err;
+        console.warn(`streamGemini failed for model ${model}:`, err.message);
       }
-      return;
-    } catch (err: any) {
-      lastError = err;
-      console.warn(`Stream attempt ${attempt} failed, trying next key...`);
     }
   }
 
-  throw lastError || new Error('Streaming failed across all Gemini keys');
+  throw lastError || new Error('Streaming failed across all Gemini keys and models');
 }

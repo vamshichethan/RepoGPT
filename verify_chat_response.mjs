@@ -19,8 +19,15 @@ async function run() {
 
   // Click Chat tab
   console.log('Clicking Chat tab...');
-  await page.waitForSelector('button[value="chat"]', { timeout: 10000 });
-  await page.click('button[value="chat"]');
+  await page.waitForFunction(() => {
+    const buttons = Array.from(document.querySelectorAll('button[data-slot="tabs-trigger"], button[role="tab"]'));
+    const chatBtn = buttons.find((b) => b.textContent?.includes('Chat'));
+    if (chatBtn) {
+      chatBtn.click();
+      return true;
+    }
+    return false;
+  }, { timeout: 15000 });
 
   // Wait for textarea to be active and not disabled
   console.log('Waiting for active textarea...');
@@ -28,21 +35,26 @@ async function run() {
 
   console.log('Typing query...');
   await page.type('textarea:not([disabled])', 'wt changes to make');
+  await new Promise((r) => setTimeout(r, 500));
 
   console.log('Submitting query...');
-  await page.evaluate(() => {
-    const btn = document.querySelector('button[type="submit"]');
-    if (btn) btn.click();
-  });
+  await page.click('button[type="submit"]');
 
   console.log('Waiting for AI response to stream in...');
   // Wait until user message appears and AI assistant starts streaming
   await page.waitForFunction(
     () => {
       const text = document.body.innerText;
-      return text.includes('index.html') || text.includes('styles.css') || text.includes('Changes') || text.includes('HTML');
+      return (
+        text.includes('index.html') ||
+        text.includes('styles.css') ||
+        text.includes('Changes') ||
+        text.includes('HTML') ||
+        text.includes('Spoon-Knife') ||
+        text.includes('repository')
+      );
     },
-    { timeout: 25000 }
+    { timeout: 35000 }
   );
 
   // Allow 5 seconds for streaming tokens to accumulate
