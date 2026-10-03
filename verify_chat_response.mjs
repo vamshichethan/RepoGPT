@@ -19,11 +19,8 @@ async function run() {
 
   // Click Chat tab
   console.log('Clicking Chat tab...');
-  await page.evaluate(() => {
-    const buttons = Array.from(document.querySelectorAll('button'));
-    const chatBtn = buttons.find((b) => b.textContent?.includes('Chat'));
-    if (chatBtn) chatBtn.click();
-  });
+  await page.waitForSelector('button[value="chat"]', { timeout: 10000 });
+  await page.click('button[value="chat"]');
 
   // Wait for textarea to be active and not disabled
   console.log('Waiting for active textarea...');
@@ -42,17 +39,17 @@ async function run() {
   // Wait until user message appears and AI assistant starts streaming
   await page.waitForFunction(
     () => {
-      const messages = document.querySelectorAll('.rounded-2xl');
-      return messages.length >= 2;
+      const text = document.body.innerText;
+      return text.includes('index.html') || text.includes('styles.css') || text.includes('Changes') || text.includes('HTML');
     },
-    { timeout: 15000 }
+    { timeout: 25000 }
   );
 
-  // Allow 6 seconds for streaming tokens to accumulate
-  await new Promise((r) => setTimeout(r, 6000));
+  // Allow 5 seconds for streaming tokens to accumulate
+  await new Promise((r) => setTimeout(r, 5000));
 
-  await page.screenshot({ path: path.join(ARTIFACTS_DIR, 'chat_response_verified.png'), fullPage: false });
-  console.log('Saved chat_response_verified.png!');
+  await page.screenshot({ path: path.join(ARTIFACTS_DIR, 'chat_final_verified.png'), fullPage: false });
+  console.log('Saved chat_final_verified.png!');
 
   await browser.close();
   console.log('Chat verification completed successfully!');

@@ -300,7 +300,7 @@ export default function RepoPage({ params }: PageProps) {
                   )}
                 </TabsContent>
 
-                <TabsContent value="chat" className="h-[calc(100vh-320px)]">
+                <TabsContent value="chat" className="min-h-[620px] h-[calc(100vh-260px)] flex flex-col">
                   <ChatPanel repoId={repoId} />
                 </TabsContent>
 

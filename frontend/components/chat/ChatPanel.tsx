@@ -53,7 +53,7 @@ export function ChatPanel({ repoId }: ChatPanelProps) {
   };
 
   return (
-    <Card className="glass border-white/5 h-full flex flex-col overflow-hidden shadow-xl rounded-2xl">
+    <Card className="glass border-white/5 flex-1 min-h-[600px] flex flex-col overflow-hidden shadow-xl rounded-2xl">
       {/* Top Session bar */}
       <div className="px-6 py-3 bg-white/5 border-b border-white/5 flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -72,7 +72,7 @@ export function ChatPanel({ repoId }: ChatPanelProps) {
       </div>
 
       {/* Message List area */}
-      <ScrollArea ref={scrollRef} className="flex-1 min-h-0 bg-black/10">
+      <ScrollArea ref={scrollRef} className="flex-1 min-h-[440px] bg-black/10">
         <div className="flex flex-col">
           {messages.length === 0 && !streaming && !loading && (
             /* Welcome and Prompt suggestion panel */
