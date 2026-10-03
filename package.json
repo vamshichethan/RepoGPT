@@ -1,0 +1,12 @@
+{
+  "name": "repogpt-monorepo",
+  "private": true,
+  "workspaces": [
+    "frontend"
+  ],
+  "scripts": {
+    "build": "npm run build --workspace=frontend",
+    "dev": "npm run dev --workspace=frontend",
+    "start": "npm run start --workspace=frontend"
+  }
+}
