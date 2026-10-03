@@ -10,12 +10,12 @@ export function Header({ repo }: HeaderProps) {
   return (
     <header className="h-16 border-b border-white/5 bg-[#0a0a0f]/60 backdrop-blur-md px-6 flex items-center justify-between shrink-0">
       {/* Breadcrumbs */}
-      <div className="flex items-center gap-2 text-sm text-white/50">
-        <span className="hover:text-white/80 transition-colors">Repositories</span>
-        <span className="text-white/20">/</span>
-        <span className="text-white/80 font-medium">{repo.owner}</span>
-        <span className="text-white/20">/</span>
-        <span className="text-white font-semibold">{repo.name}</span>
+      <div className="flex items-center gap-2 text-sm text-white/50 min-w-0">
+        <span className="hover:text-white/80 transition-colors shrink-0">Repositories</span>
+        <span className="text-white/20 shrink-0">/</span>
+        <span className="text-white/80 font-medium shrink-0">{repo.owner}</span>
+        <span className="text-white/20 shrink-0">/</span>
+        <span className="text-white font-semibold truncate max-w-sm">{repo.name}</span>
       </div>
 
       {/* Actions */}

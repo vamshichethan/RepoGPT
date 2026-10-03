@@ -112,12 +112,12 @@ export default function RepoPage({ params }: PageProps) {
             {/* Repo Header */}
             <div className="mb-6 animate-fade-in">
               <div className="flex flex-wrap items-start gap-3 mb-3">
-                <div>
-                  <h1 className="text-2xl font-bold text-white tracking-tight">
+                <div className="min-w-0 flex-1">
+                  <h1 className="text-2xl font-bold text-white tracking-tight break-words">
                     {repo.owner}/{repo.name}
                   </h1>
                   {repo.description && (
-                    <p className="text-white/50 mt-1 text-sm">{repo.description}</p>
+                    <p className="text-white/50 mt-1 text-sm break-words">{repo.description}</p>
                   )}
                 </div>
                 <Badge
