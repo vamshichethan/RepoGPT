@@ -217,11 +217,14 @@ async def generate_summary(
     max_retries = 3
     base_delay = 5.0
     response = None
-    last_error: Exception | None = None
+    model = settings.summary_model
+    if "3.5" in model or "2.0" in model:
+        model = "gemini-2.5-flash"
+
     for attempt in range(max_retries):
         try:
             response = await openai_client.chat.completions.create(
-                model=settings.summary_model,
+                model=model,
                 messages=[
                     {
                         "role": "system",

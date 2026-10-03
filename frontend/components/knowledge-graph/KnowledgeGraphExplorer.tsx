@@ -140,23 +140,24 @@ export function KnowledgeGraphExplorer({ repoId }: KnowledgeGraphExplorerProps) 
       if (!visTypes.has(src.type) || !visTypes.has(tgt.type)) continue;
 
       const isHighlighted = hasHighlight && (highlighted.has(srcId) || highlighted.has(tgtId));
-      const alpha = hasHighlight ? (isHighlighted ? 0.9 : 0.08) : 0.3;
-      const color = REL_COLORS[link.type] || '#ffffff';
+      const alpha = hasHighlight ? (isHighlighted ? 0.95 : 0.1) : 0.45;
+      const color = REL_COLORS[link.type] || '#818cf8';
 
       ctx.beginPath();
       ctx.strokeStyle = color;
       ctx.globalAlpha = alpha;
-      ctx.lineWidth = isHighlighted ? 2 : 1;
+      ctx.lineWidth = isHighlighted ? 2.5 : 1.5;
 
       // Arrow line
       const dx = (tgt.x ?? 0) - (src.x ?? 0);
       const dy = (tgt.y ?? 0) - (src.y ?? 0);
       const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-      const nodeR = 8;
-      const startX = (src.x ?? 0) + (dx / dist) * nodeR;
-      const startY = (src.y ?? 0) + (dy / dist) * nodeR;
-      const endX = (tgt.x ?? 0) - (dx / dist) * (nodeR + 5);
-      const endY = (tgt.y ?? 0) - (dy / dist) * (nodeR + 5);
+      const srcR = src.type === 'service' ? 18 : 14;
+      const tgtR = tgt.type === 'service' ? 18 : 14;
+      const startX = (src.x ?? 0) + (dx / dist) * srcR;
+      const startY = (src.y ?? 0) + (dy / dist) * srcR;
+      const endX = (tgt.x ?? 0) - (dx / dist) * (tgtR + 6);
+      const endY = (tgt.y ?? 0) - (dy / dist) * (tgtR + 6);
 
       ctx.moveTo(startX, startY);
       ctx.lineTo(endX, endY);
@@ -168,8 +169,8 @@ export function KnowledgeGraphExplorer({ repoId }: KnowledgeGraphExplorerProps) 
       ctx.globalAlpha = alpha;
       ctx.fillStyle = color;
       ctx.moveTo(endX, endY);
-      ctx.lineTo(endX - 8 * Math.cos(angle - 0.4), endY - 8 * Math.sin(angle - 0.4));
-      ctx.lineTo(endX - 8 * Math.cos(angle + 0.4), endY - 8 * Math.sin(angle + 0.4));
+      ctx.lineTo(endX - 9 * Math.cos(angle - 0.4), endY - 9 * Math.sin(angle - 0.4));
+      ctx.lineTo(endX - 9 * Math.cos(angle + 0.4), endY - 9 * Math.sin(angle + 0.4));
       ctx.closePath();
       ctx.fill();
     }
@@ -182,46 +183,69 @@ export function KnowledgeGraphExplorer({ repoId }: KnowledgeGraphExplorerProps) 
       const cfg = NODE_CONFIG[node.type] || NODE_CONFIG.file;
       const x = node.x ?? 0;
       const y = node.y ?? 0;
-      const r = 8;
+      const isService = node.type === 'service';
+      const r = isService ? 18 : 14;
 
       const isSelected = selectedNode?.id === node.id;
       const isHighlighted = hasHighlight ? highlighted.has(node.id) : true;
       const isHovered = hoveredNode.current?.id === node.id;
-      const alpha = isHighlighted ? 1 : 0.2;
+      const alpha = isHighlighted ? 1 : 0.25;
 
       ctx.globalAlpha = alpha;
 
-      // Glow
-      if (isSelected || isHovered) {
-        const grad = ctx.createRadialGradient(x, y, r, x, y, r * 3);
-        grad.addColorStop(0, cfg.glow);
-        grad.addColorStop(1, 'transparent');
-        ctx.beginPath();
-        ctx.arc(x, y, r * 3, 0, Math.PI * 2);
-        ctx.fillStyle = grad;
-        ctx.fill();
-      }
+      // Outer Glow
+      const glowMultiplier = isSelected || isHovered ? 3.5 : 2;
+      const grad = ctx.createRadialGradient(x, y, r, x, y, r * glowMultiplier);
+      grad.addColorStop(0, cfg.glow);
+      grad.addColorStop(1, 'transparent');
+      ctx.beginPath();
+      ctx.arc(x, y, r * glowMultiplier, 0, Math.PI * 2);
+      ctx.fillStyle = grad;
+      ctx.fill();
 
-      // Node circle
+      // Node background circle
       ctx.beginPath();
       ctx.arc(x, y, r, 0, Math.PI * 2);
       ctx.fillStyle = cfg.color;
       ctx.fill();
 
-      // Border
-      ctx.strokeStyle = isSelected ? '#ffffff' : 'rgba(255,255,255,0.3)';
-      ctx.lineWidth = isSelected ? 2 : 1;
+      // Border ring
+      ctx.strokeStyle = isSelected ? '#ffffff' : 'rgba(255,255,255,0.5)';
+      ctx.lineWidth = isSelected ? 3 : 1.5;
       ctx.stroke();
 
-      // Label (only when zoomed in enough or selected/hovered)
-      if (transform.current.scale > 0.6 || isSelected || isHovered) {
-        ctx.font = `${isSelected ? 'bold ' : ''}${Math.max(9, 11 / transform.current.scale)}px Inter, sans-serif`;
-        ctx.fillStyle = '#ffffff';
-        ctx.globalAlpha = alpha;
-        ctx.textAlign = 'center';
-        const label = node.name.length > 20 ? node.name.slice(0, 18) + '…' : node.name;
-        ctx.fillText(label, x, y + r + 13);
+      // Center symbol / icon
+      ctx.font = `${isService ? '12px' : '10px'} sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(cfg.emoji, x, y);
+
+      // Node Label with Pill Badge
+      const label = node.name.length > 22 ? node.name.slice(0, 20) + '…' : node.name;
+      ctx.font = `${isSelected ? 'bold ' : ''}11px Inter, system-ui, sans-serif`;
+      const textWidth = ctx.measureText(label).width;
+      const pillW = textWidth + 12;
+      const pillH = 18;
+      const pillX = x - pillW / 2;
+      const pillY = y + r + 5;
+
+      // Pill background
+      ctx.fillStyle = 'rgba(13, 14, 24, 0.85)';
+      ctx.strokeStyle = isSelected ? cfg.color : 'rgba(255,255,255,0.15)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      if (typeof ctx.roundRect === 'function') {
+        ctx.roundRect(pillX, pillY, pillW, pillH, 5);
+      } else {
+        ctx.rect(pillX, pillY, pillW, pillH);
       }
+      ctx.fill();
+      ctx.stroke();
+
+      // Pill text
+      ctx.fillStyle = '#f8fafc';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(label, x, pillY + pillH / 2);
     }
 
     ctx.globalAlpha = 1;
@@ -229,7 +253,7 @@ export function KnowledgeGraphExplorer({ repoId }: KnowledgeGraphExplorerProps) 
   }, [visibleTypes, highlightedNodes, selectedNode]);
 
   // ---------------------------------------------------------------------------
-  // Force-directed simulation (simple spring physics)
+  // Force-directed simulation (balanced physics)
   // ---------------------------------------------------------------------------
 
   const runSimulation = useCallback(() => {
@@ -246,14 +270,14 @@ export function KnowledgeGraphExplorer({ repoId }: KnowledgeGraphExplorerProps) 
       const links = simLinks.current;
       const nodeMap = new Map(nodes.map((n) => [n.id, n]));
 
-      // Repulsion
+      // Repulsion between all nodes
       for (let i = 0; i < nodes.length; i++) {
         for (let j = i + 1; j < nodes.length; j++) {
           const a = nodes[i], b = nodes[j];
           const dx = (b.x ?? 0) - (a.x ?? 0);
           const dy = (b.y ?? 0) - (a.y ?? 0);
           const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-          const force = (alpha * 800) / (dist * dist);
+          const force = (alpha * 3500) / (dist * dist + 10);
           a.vx! -= (dx / dist) * force;
           a.vy! -= (dy / dist) * force;
           b.vx! += (dx / dist) * force;
@@ -261,7 +285,7 @@ export function KnowledgeGraphExplorer({ repoId }: KnowledgeGraphExplorerProps) 
         }
       }
 
-      // Attraction (spring)
+      // Attraction along links (spring force)
       for (const link of links) {
         const src = nodeMap.get(getEndpointId(link.source));
         const tgt = nodeMap.get(getEndpointId(link.target));
@@ -269,28 +293,28 @@ export function KnowledgeGraphExplorer({ repoId }: KnowledgeGraphExplorerProps) 
         const dx = (tgt.x ?? 0) - (src.x ?? 0);
         const dy = (tgt.y ?? 0) - (src.y ?? 0);
         const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-        const force = (dist - 80) * alpha * 0.1;
+        const force = (dist - 150) * alpha * 0.06;
         src.vx! += (dx / dist) * force;
         src.vy! += (dy / dist) * force;
         tgt.vx! -= (dx / dist) * force;
         tgt.vy! -= (dy / dist) * force;
       }
 
-      // Center gravity
+      // Gentle center gravity (does not collapse nodes)
       for (const n of nodes) {
-        n.vx! += -(n.x ?? 0) * alpha * 0.02;
-        n.vy! += -(n.y ?? 0) * alpha * 0.02;
+        n.vx! += -(n.x ?? 0) * alpha * 0.004;
+        n.vy! += -(n.y ?? 0) * alpha * 0.004;
       }
 
-      // Integrate
+      // Integrate velocities with damping
       for (const n of nodes) {
         if (n.fx !== undefined && n.fx !== null) { n.x = n.fx; n.vx = 0; }
-        else { n.x = (n.x ?? 0) + (n.vx! *= 0.85); }
+        else { n.x = (n.x ?? 0) + (n.vx! *= 0.88); }
         if (n.fy !== undefined && n.fy !== null) { n.y = n.fy; n.vy = 0; }
-        else { n.y = (n.y ?? 0) + (n.vy! *= 0.85); }
+        else { n.y = (n.y ?? 0) + (n.vy! *= 0.88); }
       }
 
-      alpha *= 0.99;
+      alpha *= 0.985;
       drawGraph();
       animFrameRef.current = requestAnimationFrame(tick);
     };
@@ -310,16 +334,22 @@ export function KnowledgeGraphExplorer({ repoId }: KnowledgeGraphExplorerProps) 
         if (!mounted) return;
         if (!data.nodes) throw new Error('No graph data returned');
 
-        const nodes: GraphNode[] = data.nodes.map((n) => ({
-          id: n.id,
-          type: n.type || 'file',
-          name: n.name,
-          file_path: n.file_path,
-          x: Math.random() * 800 - 400,
-          y: Math.random() * 600 - 300,
-          vx: 0,
-          vy: 0,
-        }));
+        const total = data.nodes.length;
+        const nodes: GraphNode[] = data.nodes.map((n, i) => {
+          const isRoot = n.type === 'service' || i === 0;
+          const angle = ((i - 1) / Math.max(1, total - 1)) * 2 * Math.PI;
+          const radius = isRoot ? 0 : 170 + (i % 2) * 50;
+          return {
+            id: n.id,
+            type: n.type || 'file',
+            name: n.name,
+            file_path: n.file_path,
+            x: isRoot ? 0 : Math.cos(angle) * radius,
+            y: isRoot ? 0 : Math.sin(angle) * radius,
+            vx: 0,
+            vy: 0,
+          };
+        });
 
         const nodeIds = new Set(nodes.map((n) => n.id));
         const links: GraphLink[] = data.edges
@@ -386,7 +416,8 @@ export function KnowledgeGraphExplorer({ repoId }: KnowledgeGraphExplorerProps) 
       if (!visibleTypes.has(node.type)) continue;
       const dx = (node.x ?? 0) - tx;
       const dy = (node.y ?? 0) - ty;
-      if (Math.sqrt(dx * dx + dy * dy) < 12) return node;
+      const hitR = node.type === 'service' ? 26 : 20;
+      if (Math.sqrt(dx * dx + dy * dy) < hitR) return node;
     }
     return null;
   };
@@ -465,9 +496,22 @@ export function KnowledgeGraphExplorer({ repoId }: KnowledgeGraphExplorerProps) 
     setSelectedNode(null);
     setHighlightedNodes(new Set());
     api.knowledgeGraph.getGraph(repoId, 400).then((data) => {
-      const nodes: GraphNode[] = data.nodes.map((n) => ({
-        ...n, x: Math.random() * 800 - 400, y: Math.random() * 600 - 300, vx: 0, vy: 0,
-      }));
+      const total = data.nodes.length;
+      const nodes: GraphNode[] = data.nodes.map((n, i) => {
+        const isRoot = n.type === 'service' || i === 0;
+        const angle = ((i - 1) / Math.max(1, total - 1)) * 2 * Math.PI;
+        const radius = isRoot ? 0 : 170 + (i % 2) * 50;
+        return {
+          id: n.id,
+          type: n.type || 'file',
+          name: n.name,
+          file_path: n.file_path,
+          x: isRoot ? 0 : Math.cos(angle) * radius,
+          y: isRoot ? 0 : Math.sin(angle) * radius,
+          vx: 0,
+          vy: 0,
+        };
+      });
       const nodeIds = new Set(nodes.map((n) => n.id));
       const links: GraphLink[] = data.edges
         .filter((e) => nodeIds.has(e.source) && nodeIds.has(e.target))
@@ -579,7 +623,7 @@ export function KnowledgeGraphExplorer({ repoId }: KnowledgeGraphExplorerProps) 
           className="flex-1 relative glass border border-white/10 rounded-2xl overflow-hidden"
           style={{ height: '580px' }}
         >
-          {loading && (
+          {loading && simNodes.current.length === 0 && (
             <div className="absolute inset-0 flex items-center justify-center bg-[#0a0a0f]/80 z-10">
               <div className="flex flex-col items-center gap-4">
                 <div className="w-10 h-10 border-2 border-purple-500/30 border-t-purple-500 rounded-full animate-spin" />

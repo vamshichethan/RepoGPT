@@ -105,7 +105,11 @@ export function DocsPanel({ repoId, repo }: DocsPanelProps) {
   useEffect(() => {
     const load = async () => {
       try {
-        const data = await api.docs.getDocs(repoId);
+        const fetchPromise = api.docs.getDocs(repoId);
+        const timeoutPromise = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Docs timeout')), 3000)
+        );
+        const data = await Promise.race([fetchPromise, timeoutPromise]);
         if (data && (data.readme || data.architecture_doc)) {
           setDocs(data);
           return;

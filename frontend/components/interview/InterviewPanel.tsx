@@ -149,7 +149,11 @@ export function InterviewPanel({ repoId, repo }: InterviewPanelProps) {
   useEffect(() => {
     const load = async () => {
       try {
-        const data = await api.interview.getReport(repoId);
+        const fetchPromise = api.interview.getReport(repoId);
+        const timeoutPromise = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Interview timeout')), 3000)
+        );
+        const data = await Promise.race([fetchPromise, timeoutPromise]);
         if (data && data.interview_questions) {
           setReport(data);
           return;
